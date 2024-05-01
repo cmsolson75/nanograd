@@ -25,8 +25,10 @@ class Tensor:
         return cls(np.ones(shape), **kwargs)
     
     @classmethod
-    def eye(cls, shape: tuple, **kwargs):
-        return cls(np.eye(shape), **kwargs)
+    def eye(cls, N, M=None, k=0, **kwargs):
+        M = N if M is None else M
+
+        return cls(np.eye(N, M, k), **kwargs)
     
     @classmethod
     def randn(cls, shape: tuple, **kwargs):
@@ -63,6 +65,7 @@ class Tensor:
 
     def reshape(self, *args):
         # Need to implement backward
+        # What is backward on reshape?
         return Tensor(self.data.reshape(*args), requires_grad=self.requires_grad, _prev=(self,))
         
     def __matmul__(self, other):

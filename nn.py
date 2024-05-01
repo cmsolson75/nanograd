@@ -59,13 +59,3 @@ class AdamW(Optim):
 
 class Trainer:
     pass
-
-
-# This could be how to do it
-# have a simple 
-
-
-# I need it to do a sequential like thing
-
-# self.layers = nn.Sequential
-# I need it to keep track of its layers
