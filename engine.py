@@ -1,5 +1,5 @@
 import numpy as np
-# A int is getting into the computational graph, it has to be through the sum op
+
 class Tensor:
     def __init__(self, data, requires_grad=False, _prev=()):
         self.data = (data if isinstance(data, np.ndarray) 
@@ -7,8 +7,12 @@ class Tensor:
         self.grad = None
         self._backward = lambda: None
         self._prev = set(_prev)
-        self.grad_fn = str()
+        self.grad_fn = str() # for debug
         self.requires_grad = requires_grad
+
+    # --------------
+    # Creational ops
+    # --------------
 
     @classmethod
     def kaiming_uniform(cls, in_dims, out_dims, **kwargs):
@@ -62,12 +66,11 @@ class Tensor:
     @property
     def ndims(self):
         return len(self.shape)
+    
+    # ----------
+    # Binary Ops
+    # ----------
 
-    def reshape(self, *args):
-        # Need to implement backward
-        # What is backward on reshape?
-        return Tensor(self.data.reshape(*args), requires_grad=self.requires_grad, _prev=(self,))
-        
     def __matmul__(self, other):
         assert self.shape[1] == other.shape[0], f"{self.shape}, {other.shape}: Incompatible shapes for matrix multiplication."
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -155,7 +158,31 @@ class Tensor:
             out._backward = _backward 
             out.grad_fn = "PowBackward"
         return out
+    
+    def __rmul__(self, other):
+        return self * other
 
+    def __radd__(self, other):
+        return self + other
+
+    def __neg__(self):
+        return self * -1
+        
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __rsub__(self, other):
+        return other + (-self)
+
+    def __truediv__(self, other):
+        return self * other**-1
+
+    def __rtruediv__(self, other):
+        return self / other
+    
+    # ---------
+    # unary ops
+    # ---------
     def relu(self):
         out = Tensor(np.maximum(0, self.data), _prev=(self,))
         
@@ -194,7 +221,7 @@ class Tensor:
         out = Tensor(s, _prev=(self, ))
 
         def _backward():
-            if self.requires_grad: #enables dynamic graph behavior
+            if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
                 self.grad += out.data * (1 - out.data) * out.grad
@@ -247,7 +274,10 @@ class Tensor:
             out.grad_fn = "SinBackward"
         return out
     
-    # reduce op
+    # ----------
+    # reduce ops
+    # ----------
+
     def sum(self, axis=None, keepdims=False):
         result_data = np.sum(self.data, axis=axis, keepdims=keepdims)
         out = Tensor(result_data, _prev=(self,))
@@ -256,7 +286,6 @@ class Tensor:
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
-                # is this how the grad should perform?
                 grad = np.ones_like(self.data)
                 self.grad += grad * out.grad
 
@@ -267,32 +296,96 @@ class Tensor:
 
         return out
 
-    def mean(self):
-        pass
+    def mean(self, axis=None, keepdims=False):
+        out = Tensor(np.mean(self.data, axis=axis, keepdims=keepdims), 
+                     _prev=(self, ))
 
-    def __rmul__(self, other):
-        return self * other
-
-    def __radd__(self, other):
-        return self + other
-
-    def __neg__(self):
-        return self * -1
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                # distribute grad with scale 1/n
+                grad = np.full(self.data.shape, 1/self.data.size)
+                self.grad += grad * out.grad
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "MeanBackward"
         
-    def __sub__(self, other):
-        return self + (-other)
+        return out
+    
+    def max(self, axis=None, keepdims=False):
+        max_value = np.max(self.data, axis=axis, keepdims=keepdims)
+        out = Tensor(max_value, _prev=(self, ))
 
-    def __rsub__(self, other):
-        return other + (-self)
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                grad_mask = (self.data == np.expand_dims(max_value, axis=axis))
+                self.grad += grad_mask * out.grad
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "MaxBackward"
+        return out
 
-    def __truediv__(self, other):
-        return self * other**-1
+    def min(self, axis=None, keepdims=False):
+        min_value = np.min(self.data, axis=axis, keepdims=keepdims)
+        out = Tensor(min_value, _prev=(self, ))
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                grad_mask = (self.data == np.expand_dims(min_value, axis=axis))
+                self.grad += grad_mask * out.grad
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "MinBackward"
+        return out
+    
+    # ------------
+    # Movement Ops
+    # ------------
 
-    def __rtruediv__(self, other):
-        return self / other
+    def reshape(self, *shape):
+        reshaped_data = self.data.reshape(*shape)
+        out = Tensor(reshaped_data, _prev=(self, ))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                # Insure grad is reshaped to pass through this op
+                self.grad += out.grad.reshape(self.data.shape)
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "ReshapeBackward"
+        return out
+    
+    # ----------
+    # Utility Ops
+    # ----------
+
+    def argmax(self, axis=None):
+        """ Returns the indices of the maximum values along an axis. """
+        indices = np.argmax(self.data, axis=axis)
+        return indices
+    
+    def argmin(self, axis=None):
+        """ Returns the indices of the minimum values along an axis. """
+        indices = np.argmin(self.data, axis=axis)
+        return indices
+    
 
     def __repr__(self):
         return f"{self.data}"
+    
+    # ---------
+    # Backwards
+    # ---------
 
     def _topological_sort(self):
         # Update to khan algorithm

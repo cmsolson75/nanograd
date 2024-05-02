@@ -61,14 +61,17 @@ unary ops
 
 
 binary ops
-- add
-- mul
-- matmul
-- div
-- pow
-- subtract
-- equality
-- negative
+- add: done
+- mul: done
+- matmul: done
+- div: done
+- pow: done
+- square: 
+- subtract: done
+- negative: done
+- "=="
+- ">"
+- "<"
 
 movement 
 - transpose & T
@@ -79,23 +82,24 @@ movement
 
 
 reduce ops(axis)
-- sum
-- max
+- sum: done
+- mean: done
+- max & min: done
 
 creational ops
-- zeros
-- ones
-- eye
-- randn
-- arange
-- uniform
-- kaiming_uniform
+- zeros: done
+- ones: done
+- eye: done
+- randn: done
+- arange: done
+- uniform:
+- gaussian:
+- randint:
+- kaiming_uniform: done
 
 object ops
 - indexing(numpy style)
 - iterable
-
-Add broadcasting suport
 
 Backward and Derivation
 - Use Khans Algorithm to speed up topo sort.
