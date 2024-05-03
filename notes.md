@@ -76,8 +76,9 @@ binary ops
 movement 
 - transpose & T
 - stride
-- pad
-- reshape
+- pad: done
+- shrink: done
+- reshape: done
 - flatten
 
 
@@ -92,12 +93,12 @@ creational ops
 - eye: done
 - randn: done
 - arange: done
-- uniform:
-- gaussian:
-- randint:
+- uniform: done
+- gaussian: done
+- randint: done
 - kaiming_uniform: done
 
-object ops
+object ops: for data loader
 - indexing(numpy style)
 - iterable
 
@@ -109,6 +110,19 @@ General Clenlyness
 - Add in error handling
 
 
+I need to implement a data loader, this will be a iterator that handles batches for you.
+
+
+## Extra notes
+I need to implement the following
+
+Finalize basic ops for Tensor
+SGD: this needs to be implemented
+Should be able to train MNIST with this setup.
+
+Data Loader and batching:
+- Need to make Tensor Iterable
+- Need to make Tensor Indexable
 
 ## Code Notes
 
