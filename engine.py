@@ -2,9 +2,9 @@ import numpy as np
 
 
 class Tensor:
-    def __init__(self, data, requires_grad=False, _prev=()):
+    def __init__(self, data, requires_grad=False, _prev=(), dtype=np.float32):
         self.data = (data if isinstance(data, np.ndarray) else np.array(data)).astype(
-            np.float32
+            dtype=dtype
         )
         self.grad = None
         self._backward = lambda: None
@@ -69,6 +69,14 @@ class Tensor:
     @property
     def ndims(self):
         return len(self.shape)
+    
+    @property
+    def dtype(self):
+        return self.data.dtype
+    
+    @property
+    def numpy(self):
+        return self.data
 
     # ----------
     # Binary Ops
@@ -248,10 +256,11 @@ class Tensor:
         return out
 
     def swish(self):
-        pass
+        # I think this will work
+        return self * self.sigmoid()
 
     def gelu(self):
-        pass
+        return 0.5 * self * (1 + 0.797884560803 * (self + 0.044715 * self**2)).tanh()
 
     # ******standard*******
     def transpose(self):
@@ -393,6 +402,7 @@ class Tensor:
         x = self.data
         if end_dim == -1:
             end_dim = len(x.shape) - 1
+        # new shape.
         shape = (
             x.shape[:start_dim]
             + (np.prod(x.shape[start_dim : end_dim + 1]),)

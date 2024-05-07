@@ -74,12 +74,13 @@ binary ops
 - "<"
 
 movement 
-- transpose & T
+- transpose & T: done
 - stride
 - pad: done
 - shrink: done
 - reshape: done
-- flatten
+- flatten: done
+- squeeze & alternate
 
 
 reduce ops(axis)
@@ -97,6 +98,9 @@ creational ops
 - gaussian: done
 - randint: done
 - kaiming_uniform: done
+
+conversion ops
+- numpy: this will output the numpy data internally
 
 object ops: for data loader
 - indexing(numpy style)
