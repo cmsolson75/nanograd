@@ -8,14 +8,21 @@ class Module:
                 yield value
             elif isinstance(value, Module):
                 yield from value.parameters()
+    # Adding torch API like this
+    # def __call__(self, x):
+    #     self.forward()
+    #     pass
+    # def forward(self, x):
+    #     raise NotImplementedError
 
 class Linear(Module):
     def __init__(self, in_dims, out_dims):
-        self.w = Tensor.kaiming_uniform(in_dims, out_dims, requires_grad=True)
-        self.b = Tensor.zeros((1, out_dims), requires_grad=True)
+        self.weight = Tensor.kaiming_uniform(in_dims, out_dims, requires_grad=True)
+        self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
     
+    # could mimic the torch api and add forward
     def __call__(self, x):
-        return x@self.w + self.b
+        return x@self.weight + self.bias
 
     def __repr__(self):
         return f"Linear({self.w.shape})"
@@ -24,16 +31,14 @@ class Linear(Module):
 # Need to orchestrate them
 # Simple test model
 class MLP(Module):
-    def __init__(self):
-        self.layer1 = Linear(3, 4)
-        self.layer2 = Linear(4, 4)
-        self.layer3 = Linear(4, 4)
-        self.layer4 = Linear(4, 1)
+    def __init__(self, n_in, n_out):
+        self.layer1 = Linear(n_in, 64)
+        self.layer2 = Linear(64, 64)
+        self.layer4 = Linear(64, n_out)
     
     def __call__(self, x):
-        x = self.layer1(x).tanh()
-        x = self.layer2(x).tanh()
-        x = self.layer3(x).tanh()
+        x = self.layer1(x).relu()
+        x = self.layer2(x).relu()
         x = self.layer4(x)
         return x
     
@@ -111,9 +116,11 @@ class Cifar10(Dataset):
 class DataLoader:
     pass
 
-
-def cross_entropy():
+class Loss:
     pass
 
-def MSE():
+class MSELoss:
+    pass
+
+class LogLoss:
     pass

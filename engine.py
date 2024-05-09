@@ -222,6 +222,7 @@ class Tensor:
         return out
 
     def tanh(self):
+        # epsilon = 1e-8 # Stablizer
         n = self.data
         t = (np.exp(2 * n) - 1) / (np.exp(2 * n) + 1)  # Calc tanh
         out = Tensor(t, _prev=(self,))

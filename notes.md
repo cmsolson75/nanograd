@@ -6,13 +6,19 @@ I need to simplify the backward.
 
 Phase 1: Goal, train a simple demo net, archetecture should be simple and work. Backward pass should work for what you need it to. Everything is minimal, no need for a optimizer class, or a trainer, just do it by hand.
 
-Phase 2: Goal: MNIST MLP
-- Setup GitHub
-- Tensor: Full Ops implementation with testing
-- Optimizer: SGD w Momentum and L2 regularization
-- Trainer: Basic Eval Loops
+Phase 2: Sklearn datasets test
+- Get all major ops implemented
+- Match pytorch performance on Sklearn datasets
 
-Phase 3: Goal: state_save, adam, adamw, batch_norm, data_loader(mnist, cifar10)
+Phase 3: Goal: MNIST MLP
+- Tensor: Full testing suite against pytorch.
+- MNIST Dataset
+- Cifar10 Dataset
+- Dataloader
+- MLP MNIST Training run
+
+
+Phase 3: Goal: state_save, adam, adamw, batch_norm
 
 Phase 4: Conv & Pooling
 
@@ -21,22 +27,6 @@ Phase 5: Model Creation
 - AlexNet: MNIST
 - ResNet: Cifar10
 - Yolo V3: Face tracking using web cam
-
-Module Outline
-nn
-- __init__.py
-- tensor.py
-- autograd.py
-- operations.py
-- optim.py
-- trainers.py
-- module.py
-- layers.py
-models
-- MNIST_linear
-- MNIST_Conv(Alex net with batch_norm)
-- ResNet: Cifar10
-    - All implementations: look at TinyGrad for ResNet implementation
 
 
 
@@ -117,28 +107,10 @@ General Clenlyness
 
 I need to implement a data loader, this will be a iterator that handles batches for you.
 
+Notes
 
-## Extra notes
-I need to implement the following
+I have been testing against pytorch, it isnt working as intended
 
-Finalize basic ops for Tensor
-SGD: this needs to be implemented
-Should be able to train MNIST with this setup.
+I think my grads are overloading, that is confusing to me but it looks like grads are saturating, my learning is stagnating. could also be hitting a local optima, but I should miror pytorches performance but be slower.
 
-Data Loader and batching:
-- Need to make Tensor Iterable
-- Need to make Tensor Indexable
-
-Memory consideration: 
-- Adding inplace operations could improve my speed when I move to RESNET and Yolo, I will be stuck to CPU so any efficaincy is appreciated.
-
-
-With regards to convolutions
-- Need to first implement it the explicit way with multiple loops
-- Use the im2col method to make this simpler.
-
-
-Need basic stats operations: 
-- mean
-- median
-- std
+Tanh is unstable, need to do some kind of stablization to make sure I dont overload the grad, could clip it.
