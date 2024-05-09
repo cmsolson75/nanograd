@@ -254,6 +254,9 @@ class Tensor:
             out._backward = _backward
             out.grad_fn = "SigmoidBackward"
         return out
+    
+    def softmax(self):
+        pass
 
     def swish(self):
         # I think this will work
@@ -323,6 +326,9 @@ class Tensor:
             out._backward = _backward
             out.grad_fn = "SinBackward"
         return out
+    
+    def square(self):
+        return self**2
 
     # ----------
     # Reduce ops
@@ -493,7 +499,41 @@ class Tensor:
         """Returns the indices of the minimum values along an axis."""
         indices = np.argmin(self.data, axis=axis)
         return indices
+    
+    def __getitem__(self, index):
+        if isinstance(index, Tensor):
+            index = index.data
+        
+        result = self.data[index]
+        out = Tensor(result, _prev=(self,))
 
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                grad_output = np.zeros_like(self.data)
+                if isinstance(index, slice):
+                    grad_output[index] = out.grad
+
+                elif isinstance(index, np.ndarray) and index.dtype == np.bool:
+                    grad_output[index] = out.grad
+
+                elif isinstance(index, np.ndarray) and index.dtype == np.int:
+                    np.add.at(grad_output, index, out.grad)
+
+                else:
+                    raise NotImplementedError("Unsupported indexing type for gradients.")
+                
+                self.grad += grad_output
+
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "IndexBackward"
+
+        return out
+
+    
     def __repr__(self):
         return f"{self.data}"
 

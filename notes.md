@@ -66,7 +66,7 @@ binary ops
 - matmul: done
 - div: done
 - pow: done
-- square: 
+- square: done
 - subtract: done
 - negative: done
 - "=="
@@ -75,12 +75,13 @@ binary ops
 
 movement 
 - transpose & T: done
-- stride
+- stride: Need to add
+- im2col: Need to add
 - pad: done
 - shrink: done
 - reshape: done
 - flatten: done
-- squeeze & alternate
+- squeeze & unsqueeze: Need to add
 
 
 reduce ops(axis)
@@ -128,52 +129,16 @@ Data Loader and batching:
 - Need to make Tensor Iterable
 - Need to make Tensor Indexable
 
-## Code Notes
+Memory consideration: 
+- Adding inplace operations could improve my speed when I move to RESNET and Yolo, I will be stuck to CPU so any efficaincy is appreciated.
 
-Not doing a recursive topo due to recursion limits, use a deque
 
-Topological sort: Look this up
-This is called Khans Algorithm: look it up
+With regards to convolutions
+- Need to first implement it the explicit way with multiple loops
+- Use the im2col method to make this simpler.
 
-```
-def _topological_sort(self):
-        # Calculate in-degrees of each node
-        in_degree = {self: 0}
-        queue = deque([self])  # Start with the final node and explore backwards
 
-        while queue:
-            node = queue.popleft()
-            for pred in node._prev:
-                if pred not in in_degree:
-                    in_degree[pred] = 0
-                in_degree[pred] += 1
-                if pred not in node._next:
-                    pred._next.add(node)  # Build the next relationship
-                    queue.append(pred)
-
-        # Start with nodes with no incoming edges (in_degree 0)
-        zero_in_degree_queue = deque([n for n in in_degree if in_degree[n] == 0])
-        topo_sorted = []
-
-        while zero_in_degree_queue:
-            node = zero_in_degree_queue.popleft()
-            topo_sorted.append(node)
-            for next_node in node._next:
-                in_degree[next_node] -= 1
-                if in_degree[next_node] == 0:
-                    zero_in_degree_queue.append(next_node)
-
-        if len(topo_sorted) != len(in_degree):
-            raise Exception("Graph has at least one cycle, which is not allowed for topological sort")
-
-        return topo_sorted
-
-    def _compute_gradients(self, topo_sorted):
-        self.grad = np.ones_like(self.data)  # Initialize the gradient for the starting node
-        for node in reversed(topo_sorted):
-            node._backward()
-
-    def backward(self):
-        topo_sorted = self._topological_sort()
-        self._compute_gradients(topo_sorted)
-```
+Need basic stats operations: 
+- mean
+- median
+- std
