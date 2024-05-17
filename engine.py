@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 
 class Tensor:
@@ -16,12 +17,42 @@ class Tensor:
     # Creational ops
     # --------------
 
-    @classmethod
-    def kaiming_uniform(cls, in_dims, out_dims, **kwargs):
-        limit = np.sqrt(6 / in_dims)
-        data = np.random.uniform(-limit, limit, (in_dims, out_dims))
-        return cls(data, **kwargs)
 
+    @classmethod
+    def kaiming_uniform(cls, in_dims, out_dims, gain: float = math.sqrt(5), **kwargs):
+        """
+        Kaiming Uniform initialization (He initialization) for weight matrices.
+
+        Args:
+            in_dims (int): Number of input dimensions (number of input units).
+            out_dims (int): Number of output dimensions (number of neurons in the layer).
+            gain (float): The scaling factor (set to sqrt(5) for a=sqrt(5) behavior).
+
+        Returns:
+            numpy.ndarray: The initialized weights.
+        """
+
+        def calculate_fan_in(weight):
+            """
+            Calculates the fan-in (number of incoming connections) for a weight tensor.
+
+            Args:
+                weight (np.ndarray or torch.Tensor): The weight tensor of a linear layer.
+
+            Returns:
+                int: The fan-in (number of incoming connections).
+            """
+            if len(weight.shape) == 1:
+                return weight.shape[0]
+            else:
+                return weight.shape[1]  # Assuming weights are shaped (out_dims, in_dims)
+
+        fan_in = calculate_fan_in(np.zeros((out_dims, in_dims)))  # Create a dummy weight for fan calculation
+
+        bound = np.sqrt(3.0) * np.sqrt(2.0 / (1 + gain**2)) / np.sqrt(fan_in)  # Compute the correct boundary for uniform distribution
+        data = np.random.uniform(-bound, bound, size=(in_dims, out_dims))  # Notice the size parameter
+        return cls(data, **kwargs)
+    
     @classmethod
     def zeros(cls, shape: tuple, **kwargs):
         return cls(np.zeros(shape), **kwargs)
@@ -78,6 +109,10 @@ class Tensor:
     def numpy(self):
         return self.data
 
+    @property
+    def item(self):
+        return self.data.item()
+
     # ----------
     # Binary Ops
     # ----------
@@ -116,24 +151,18 @@ class Tensor:
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
-                grad_self, _ = np.broadcast_arrays(out.grad, self.data)
-                axes_to_reduce = tuple(
-                    i
-                    for i in range(grad_self.ndim)
-                    if self.data.shape[i] != grad_self.shape[i]
-                )
-                self.grad += np.sum(grad_self, axis=axes_to_reduce, keepdims=True)
+                grad_self = out.grad
+                if grad_self.shape != self.data.shape:
+                    grad_self = np.sum(grad_self, axis=tuple(range(grad_self.ndim - self.data.ndim)))
+                self.grad += grad_self
 
             if other.requires_grad:
                 if other.grad is None:
                     other.grad = np.zeros_like(other.data)
-                _, grad_other = np.broadcast_arrays(out.grad, other.data)
-                axes_to_reduce = tuple(
-                    i
-                    for i in range(grad_other.ndim)
-                    if other.data.shape[i] != grad_other.shape[i]
-                )
-                other.grad += np.sum(grad_other, axis=axes_to_reduce, keepdims=True)
+                grad_other = out.grad
+                if grad_other.shape != other.data.shape:
+                    grad_other = np.sum(grad_other, axis=tuple(range(grad_other.ndim - other.data.ndim)))
+                other.grad += grad_other
 
         if self.requires_grad or other.requires_grad:
             out.requires_grad = True
@@ -141,6 +170,7 @@ class Tensor:
             out.grad_fn = "AddBackward"
 
         return out
+
 
     def __mul__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -370,39 +400,50 @@ class Tensor:
             out.grad_fn = "MeanBackward"
 
         return out
+    
+    def std(self):
+        # Make this back propable
+        return self.data.std()
 
     def max(self, axis=None, keepdims=False):
         max_value = np.max(self.data, axis=axis, keepdims=keepdims)
-        out = Tensor(max_value, _prev=(self,))
+        out = Tensor(max_value, _prev=(self,), requires_grad=self.requires_grad)
 
         def _backward():
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
-                grad_mask = self.data == np.expand_dims(max_value, axis=axis)
+                if axis is None:
+                    grad_mask = self.data == max_value
+                else:
+                    grad_mask = self.data == np.expand_dims(max_value, axis=axis)
                 self.grad += grad_mask * out.grad
 
         if self.requires_grad:
-            out.requires_grad = True
             out._backward = _backward
             out.grad_fn = "MaxBackward"
+
         return out
 
+    
     def min(self, axis=None, keepdims=False):
         min_value = np.min(self.data, axis=axis, keepdims=keepdims)
-        out = Tensor(min_value, _prev=(self,))
+        out = Tensor(min_value, _prev=(self,), requires_grad=self.requires_grad)
 
         def _backward():
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
-                grad_mask = self.data == np.expand_dims(min_value, axis=axis)
+                if axis is None:
+                    grad_mask = self.data == min_value
+                else:
+                    grad_mask = self.data == np.expand_dims(min_value, axis=axis)
                 self.grad += grad_mask * out.grad
 
         if self.requires_grad:
-            out.requires_grad = True
             out._backward = _backward
             out.grad_fn = "MinBackward"
+
         return out
 
     def flatten(self, start_dim, end_dim=-1):
@@ -536,15 +577,13 @@ class Tensor:
 
     
     def __repr__(self):
-        return f"{self.data}"
+        return f"tensor{self.data}"
 
     # ---------
     # Backwards
     # ---------
 
     def _topological_sort(self):
-        # Update to khan algorithm
-        # Review Graph Theory
         topo = []
         visited = set()
 

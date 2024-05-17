@@ -1,5 +1,6 @@
 import numpy as np
 from engine import Tensor
+import math
 
 class Module:
     def parameters(self):
@@ -17,7 +18,7 @@ class Module:
 
 class Linear(Module):
     def __init__(self, in_dims, out_dims):
-        self.weight = Tensor.kaiming_uniform(in_dims, out_dims, requires_grad=True)
+        self.weight = Tensor.kaiming_uniform(in_dims, out_dims, gain=math.sqrt(5), requires_grad=True)
         self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
     
     # could mimic the torch api and add forward
@@ -99,6 +100,9 @@ class Adam(Optimizer):
     pass
 
 class AdamW(Adam): # Probably extends the adam class
+    pass
+
+class AMSGrad(Optimizer):
     pass
 
 class LAMB(Optimizer): # This is for the fun of it
