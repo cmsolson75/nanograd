@@ -145,7 +145,7 @@ class Tensor:
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(self.data + other.data, _prev=(self, other))
+        out = Tensor(self.data + other.data, requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
 
         def _backward():
             if self.requires_grad:
@@ -153,7 +153,8 @@ class Tensor:
                     self.grad = np.zeros_like(self.data)
                 grad_self = out.grad
                 if grad_self.shape != self.data.shape:
-                    grad_self = np.sum(grad_self, axis=tuple(range(grad_self.ndim - self.data.ndim)))
+                    # grad_self = self._reduce_grad(grad_self, self.data.shape)
+                    grad_self = np.sum(grad_self, axis=0)
                 self.grad += grad_self
 
             if other.requires_grad:
@@ -161,7 +162,9 @@ class Tensor:
                     other.grad = np.zeros_like(other.data)
                 grad_other = out.grad
                 if grad_other.shape != other.data.shape:
-                    grad_other = np.sum(grad_other, axis=tuple(range(grad_other.ndim - other.data.ndim)))
+                    grad_other = np.sum(grad_other, axis=0, keepdims=True)
+                    grad_other = np.squeeze(grad_other)
+                    if other.shape == (): grad_other = np.sum(grad_other)
                 other.grad += grad_other
 
         if self.requires_grad or other.requires_grad:
@@ -170,6 +173,33 @@ class Tensor:
             out.grad_fn = "AddBackward"
 
         return out
+
+    # def _reduce_grad(self, grad, target_shape):
+    #     """
+    #     Reduces the gradient to match the target shape by summing along the appropriate axes.
+    #     """
+    #     print(grad)
+    #     # Determine the axes to sum over
+    #     reduction_axes = tuple(i for i in range(len(grad.shape)) if i >= len(target_shape) or grad.shape[i] != target_shape[i])
+    #     print(reduction_axes)
+    #     # Sum over the reduction axes
+    #     if reduction_axes:
+    #         grad = np.sum(grad, axis=reduction_axes, keepdims=True)
+        
+    #     # Squeeze extra dimensions if any
+    #     grad = np.squeeze(grad)
+    #     print("TARGET SHAPE: ", target_shape)
+    #     print("TEST PROD: ", np.prod(target_shape))
+    #     if grad.size != np.prod(target_shape):
+    #         grad = np.tile(grad, int(np.prod(target_shape) / grad.size))
+    #     print("Grad before reshape: ", grad)
+    #     grad = grad.reshape(target_shape)
+        
+    #     return grad
+
+
+
+
 
 
     def __mul__(self, other):
@@ -329,6 +359,8 @@ class Tensor:
         return out
 
     def log(self):
+        if np.any(self.data <= 0):
+            raise ValueError("Logarithm undefined for non-positive values.")
         out = Tensor(np.log(self.data), _prev=(self,))
 
         def _backward():
@@ -577,7 +609,7 @@ class Tensor:
 
     
     def __repr__(self):
-        return f"tensor{self.data}"
+        return f"tensor({self.data})"
 
     # ---------
     # Backwards

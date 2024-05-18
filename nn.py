@@ -102,7 +102,7 @@ class Adam(Optimizer):
 class AdamW(Adam): # Probably extends the adam class
     pass
 
-class AMSGrad(Optimizer):
+class ADAGrad(Optimizer):
     pass
 
 class LAMB(Optimizer): # This is for the fun of it
@@ -126,5 +126,14 @@ class Loss:
 class MSELoss:
     pass
 
-class LogLoss:
+class L1Loss:
+    pass
+
+class HuberLoss:
+    pass
+
+class BCELoss:
+    pass
+
+class CrossEntropyLoss:
     pass
