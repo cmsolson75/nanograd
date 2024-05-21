@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from engine import Tensor  # Replace with the actual import
+from tensor import Tensor  # Replace with the actual import
 
 EPSILON = 1e-6  # Tolerance for floating point comparison
 
@@ -19,6 +19,8 @@ def setup_data():
 
 @pytest.mark.parametrize("x, y", [
     (np.random.randn(2, 3), np.random.randn(3)),  # Broadcasting case
+    (np.random.randn(3), np.random.randn(3, 3)),  # Broadcasting case
+    (np.random.randn(2, 3), np.random.randn(2, 3))  # Regular case
     (np.random.randn(2, 3), np.random.randn(2, 3))  # Regular case
 ])
 def test_broadcast_addition(x, y):

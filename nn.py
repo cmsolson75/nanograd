@@ -1,5 +1,5 @@
 import numpy as np
-from engine import Tensor
+from tensor import Tensor
 import math
 
 class Module:
@@ -120,11 +120,22 @@ class Cifar10(Dataset):
 class DataLoader:
     pass
 
-class Loss:
-    pass
 
-class MSELoss:
-    pass
+class Loss:
+    def __call__(self, y_hat, y):
+        raise NotImplementedError
+
+class NLLLoss(Loss):
+    def __call__(self, y_hat, y):
+        N = self.data.shape[0]
+        log_probs = self  # Assume self is already log_softmax output
+        nll = -log_probs.data[np.arange(N), targets.data]
+        out = Tensor(nll.mean(), _prev=(self,))
+
+class MSELoss(Loss):
+    def __call__(self, y_hat, y):
+        loss = (y_hat - y).square().mean()
+        return loss
 
 class L1Loss:
     pass
@@ -136,4 +147,5 @@ class BCELoss:
     pass
 
 class CrossEntropyLoss:
+    # Sparse Catagorical Cross Entropy Loss
     pass

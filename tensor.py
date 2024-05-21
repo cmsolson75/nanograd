@@ -153,8 +153,10 @@ class Tensor:
                     self.grad = np.zeros_like(self.data)
                 grad_self = out.grad
                 if grad_self.shape != self.data.shape:
-                    # grad_self = self._reduce_grad(grad_self, self.data.shape)
-                    grad_self = np.sum(grad_self, axis=0)
+                    grad_self = np.sum(grad_self, axis=0, keepdims=True)
+                    grad_self = np.squeeze(grad_self)
+                    if self.data.shape == (): 
+                        grad_self = np.sum(grad_self)
                 self.grad += grad_self
 
             if other.requires_grad:
@@ -173,33 +175,6 @@ class Tensor:
             out.grad_fn = "AddBackward"
 
         return out
-
-    # def _reduce_grad(self, grad, target_shape):
-    #     """
-    #     Reduces the gradient to match the target shape by summing along the appropriate axes.
-    #     """
-    #     print(grad)
-    #     # Determine the axes to sum over
-    #     reduction_axes = tuple(i for i in range(len(grad.shape)) if i >= len(target_shape) or grad.shape[i] != target_shape[i])
-    #     print(reduction_axes)
-    #     # Sum over the reduction axes
-    #     if reduction_axes:
-    #         grad = np.sum(grad, axis=reduction_axes, keepdims=True)
-        
-    #     # Squeeze extra dimensions if any
-    #     grad = np.squeeze(grad)
-    #     print("TARGET SHAPE: ", target_shape)
-    #     print("TEST PROD: ", np.prod(target_shape))
-    #     if grad.size != np.prod(target_shape):
-    #         grad = np.tile(grad, int(np.prod(target_shape) / grad.size))
-    #     print("Grad before reshape: ", grad)
-    #     grad = grad.reshape(target_shape)
-        
-    #     return grad
-
-
-
-
 
 
     def __mul__(self, other):
@@ -316,8 +291,19 @@ class Tensor:
             out.grad_fn = "SigmoidBackward"
         return out
     
-    def softmax(self):
-        pass
+    def softmax(self, axis=-1):
+        # for stability
+        m = self - self.max(axis=axis, keepdims=True)
+        e = m.exp()
+        return e / e.sum()
+    
+    def log_softmax(self, axis=-1):
+        max_tensor = self.max(axis=axis, keepdims=True)
+        m = self - max_tensor
+        e = m.exp()
+        s = e.sum(axis=axis, keepdims=True)
+        return m - s.log()
+
 
     def swish(self):
         # I think this will work
@@ -392,6 +378,23 @@ class Tensor:
     
     def square(self):
         return self**2
+
+
+    def abs(self):
+        out = Tensor(np.abs(self.data), requires_grad=self.requires_grad, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                self.grad += np.sign(self.data) * out.grad
+
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "AbsBackward"
+        
+        return out
 
     # ----------
     # Reduce ops
@@ -559,6 +562,10 @@ class Tensor:
             out.grad_fn = "ShrinkBackward"
 
         return out
+    # ----------
+    # Functional nn ops
+    # ----------
+    # conv2d etc
 
     # ----------
     # Utility Ops
