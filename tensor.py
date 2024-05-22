@@ -53,6 +53,15 @@ class Tensor:
         data = np.random.uniform(-bound, bound, size=(in_dims, out_dims))  # Notice the size parameter
         return cls(data, **kwargs)
     
+    def kaiming_normal(self):
+        pass
+
+    def xavier_uniform(self):
+        pass
+
+    def xavier_normal(self):
+        pass
+    
     @classmethod
     def zeros(cls, shape: tuple, **kwargs):
         return cls(np.zeros(shape), **kwargs)
@@ -382,7 +391,6 @@ class Tensor:
     def square(self):
         return self**2
 
-
     def abs(self):
         out = Tensor(np.abs(self.data), requires_grad=self.requires_grad, _prev=(self,))
 
@@ -474,6 +482,7 @@ class Tensor:
         out = Tensor(min_value, _prev=(self,), requires_grad=self.requires_grad)
 
         def _backward():
+            min_value = np.min(self.data, axis=axis, keepdims=keepdims)
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
@@ -548,7 +557,7 @@ class Tensor:
         x = self.data
         if end_dim == -1:
             end_dim = len(x.shape) - 1
-        # new shape.
+        # new shape. This is hard to read but trust in the process it works
         shape = (
             x.shape[:start_dim]
             + (np.prod(x.shape[start_dim : end_dim + 1]),)

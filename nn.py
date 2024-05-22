@@ -9,40 +9,51 @@ class Module:
                 yield value
             elif isinstance(value, Module):
                 yield from value.parameters()
-    # Adding torch API like this
-    # def __call__(self, x):
-    #     self.forward()
-    #     pass
-    # def forward(self, x):
-    #     raise NotImplementedError
+    
+    def __call__(self, x):
+        self.forward(x)
+    
+    def forward(self, x):
+        raise NotImplementedError
 
 class Linear(Module):
     def __init__(self, in_dims, out_dims):
         self.weight = Tensor.kaiming_uniform(in_dims, out_dims, gain=math.sqrt(5), requires_grad=True)
         self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
     
-    # could mimic the torch api and add forward
     def __call__(self, x):
-        return x@self.weight + self.bias
+        return self.forward(x)
+    
+    def forward(self, x):
+        return x @ self.weight + self.bias
 
     def __repr__(self):
         return f"Linear({self.w.shape})"
+    
+
+class Sequential(Module):
+    pass
 
 
-# Need to orchestrate them
-# Simple test model
-class MLP(Module):
-    def __init__(self, n_in, n_out):
-        self.layer1 = Linear(n_in, 64)
-        self.layer2 = Linear(64, 64)
-        self.layer4 = Linear(64, n_out)
-    
-    def __call__(self, x):
-        x = self.layer1(x).relu()
-        x = self.layer2(x).relu()
-        x = self.layer4(x)
-        return x
-    
+class Conv1d(Module):
+    pass
+
+class Conv2d(Module):
+    pass
+
+class MaxPool1d(Module):
+    pass
+
+class MaxPool2d(Module):
+    pass
+
+class AvgPool1d(Module):
+    pass
+
+class AvgPool2d(Module):
+    pass
+
+#------------------------------
 
 class Optimizer:
     def __init__(self, parameters, lr, weight_decay=0):
@@ -105,6 +116,8 @@ class AdamW(Adam): # Probably extends the adam class
 class ADAGrad(Optimizer):
     pass
 
+# -----------------------------------------
+
 class Dataset:
     pass
 
@@ -114,9 +127,13 @@ class MNIST(Dataset):
 class Cifar10(Dataset):
     pass
 
+
+# ------------------------------------------
+
 class DataLoader:
     pass
 
+# ------------------------------------------
 
 class Loss:
     def __call__(self, y_hat, y):
@@ -137,7 +154,7 @@ class MSELoss(Loss):
         loss = (y_hat - y).square().mean()
         return loss
 
-class BCELoss:
+class BCELoss(Loss):
     def __call__(self, y_hat, y):
         # Ensure numerical stability with epsilon
         epsilon = 1e-12
@@ -148,7 +165,7 @@ class BCELoss:
         return loss
 
 
-class CrossEntropyLoss:
+class CrossEntropyLoss(Loss):
     # Sparse Catagorical Cross Entropy Loss
     def __call__(self, y_hat, y):
         log_prob = y_hat.log_softmax(axis=1) # need to check axis
@@ -156,8 +173,38 @@ class CrossEntropyLoss:
         return loss
 
 
-class L1Loss:
-    pass
+class L1Loss(Loss):
+    def __call__(self, y_hat, y):
+        loss = (y_hat - y).abs().mean()
+
 
 class HuberLoss:
+    pass
+
+
+
+#---------------
+
+class BatchNorm1d(Module):
+    pass
+
+class BatchNorm2d(Module):
+    pass
+
+class Dropout(Module):
+    pass
+
+
+#-----------------
+
+class ReLU(Module):
+    pass
+
+class LeakyReLU(Module):
+    pass
+
+class Tanh(Module):
+    pass
+
+class Sigmoid(Module):
     pass
