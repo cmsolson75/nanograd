@@ -105,9 +105,6 @@ class AdamW(Adam): # Probably extends the adam class
 class ADAGrad(Optimizer):
     pass
 
-class LAMB(Optimizer): # This is for the fun of it
-    pass
-
 class Dataset:
     pass
 
@@ -127,25 +124,40 @@ class Loss:
 
 class NLLLoss(Loss):
     def __call__(self, y_hat, y):
-        N = self.data.shape[0]
-        log_probs = self  # Assume self is already log_softmax output
-        nll = -log_probs.data[np.arange(N), targets.data]
-        out = Tensor(nll.mean(), _prev=(self,))
+        N = y_hat.data.shape[0]  # Batch size
+        log_probs = y_hat  # Assuming y_hat is already log_softmax output
+
+        # Gather the log probabilities corresponding to the true labels
+        nll = (-log_probs[np.arange(N), y.data]).mean()  # This is masking for output
+        return nll
+    
 
 class MSELoss(Loss):
     def __call__(self, y_hat, y):
         loss = (y_hat - y).square().mean()
         return loss
 
+class BCELoss:
+    def __call__(self, y_hat, y):
+        # Ensure numerical stability with epsilon
+        epsilon = 1e-12
+        y_hat = y_hat.clip(epsilon, 1 - epsilon)
+        
+        # Calculate the BCE loss
+        loss = -(y * y_hat.log() + (1 - y) * (1 - y_hat).log()).mean()
+        return loss
+
+
+class CrossEntropyLoss:
+    # Sparse Catagorical Cross Entropy Loss
+    def __call__(self, y_hat, y):
+        log_prob = y_hat.log_softmax(axis=1) # need to check axis
+        loss = NLLLoss()(log_prob, y)
+        return loss
+
+
 class L1Loss:
     pass
 
 class HuberLoss:
-    pass
-
-class BCELoss:
-    pass
-
-class CrossEntropyLoss:
-    # Sparse Catagorical Cross Entropy Loss
     pass

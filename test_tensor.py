@@ -20,7 +20,7 @@ def setup_data():
 @pytest.mark.parametrize("x, y", [
     (np.random.randn(2, 3), np.random.randn(3)),  # Broadcasting case
     (np.random.randn(3), np.random.randn(3, 3)),  # Broadcasting case
-    (np.random.randn(2, 3), np.random.randn(2, 3))  # Regular case
+    (np.random.randn(2, 3), np.random.randn(2, 3)),  # Regular case
     (np.random.randn(2, 3), np.random.randn(2, 3))  # Regular case
 ])
 def test_broadcast_addition(x, y):
@@ -40,9 +40,11 @@ def test_broadcast_addition(x, y):
 
 @pytest.mark.parametrize("x, y", [
     (np.random.randn(2, 3), np.random.randn(2, 3)),
-    (np.random.randn(3, 4), np.random.randn(3, 4))  # Ensure compatible shapes
+    (np.random.randn(3, 4), np.random.randn(3, 4)),  # Ensure compatible shapes
+    (np.random.randn(8, 1), np.random.randn(8, 4))
 ])
 def test_add(x, y):
+    print(x.shape, y.shape)
     t1 = Tensor(x, requires_grad=True)
     t2 = Tensor(y, requires_grad=True)
     result = t1 + t2
@@ -217,7 +219,7 @@ def test_mean(x):
     np.random.randn(2, 3),
     np.random.randn(4, 5)
 ])
-def test_max(x):
+def test_max_og(x):
     t1 = Tensor(x, requires_grad=True)
     result = t1.max()
     result.backward()
@@ -390,6 +392,45 @@ def test_mixed_operations():
     print(f"t2: {t2.grad}, y_torch: {y_torch.grad}")
     assert_gradients_equal(t2, y_torch)
 
+import pytest
+import torch
+import numpy as np
+from tensor import Tensor  # Replace with the actual import
+
+EPSILON = 1e-6  # Tolerance for floating point comparison
+
+def assert_tensors_equal(tensor1, tensor2):
+    np.testing.assert_allclose(tensor1.data, tensor2.detach().numpy(), rtol=EPSILON, atol=EPSILON)
+
+def assert_gradients_equal(tensor1, tensor2):
+    np.testing.assert_allclose(tensor1.grad, tensor2.grad.detach().numpy(), rtol=EPSILON, atol=EPSILON)
+
+@pytest.mark.parametrize("x, axis, keepdims", [
+    (np.random.randn(2, 3), None, False),
+    (np.random.randn(4, 5), None, False),
+    (np.random.randn(2, 3), 0, False),
+    (np.random.randn(2, 3), 1, False),
+    (np.random.randn(4, 5), 0, True),
+    (np.random.randn(4, 5), 1, True),
+    # (np.random.randn(4, 5, 6), (1, 2), True),
+    # (np.random.randn(4, 5, 6), (1, 2), False)
+])
+def test_max(x, axis, keepdims):
+    t1 = Tensor(x, requires_grad=True)
+    result = t1.max(axis=axis, keepdims=keepdims)
+    result.backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    if axis is not None:
+        result_torch = x_torch.max(dim=axis, keepdim=keepdims).values
+    else:
+        result_torch = x_torch.max()
+
+    # For PyTorch, need to call .sum().backward() on the result to make it scalar
+    result_torch.sum().backward()
+
+    assert_tensors_equal(result, result_torch)
+    assert_gradients_equal(t1, x_torch)
 
 if __name__ == "__main__":
     pytest.main()

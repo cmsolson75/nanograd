@@ -152,21 +152,24 @@ class Tensor:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
                 grad_self = out.grad
-                if grad_self.shape != self.data.shape:
-                    grad_self = np.sum(grad_self, axis=0, keepdims=True)
-                    grad_self = np.squeeze(grad_self)
-                    if self.data.shape == (): 
-                        grad_self = np.sum(grad_self)
+                if grad_self.shape != self.shape:
+                    axis = tuple(range(len(grad_self.shape) - len(self.shape)))
+                    grad_self = grad_self.sum(axis=axis)
+                    for i, dim in enumerate(self.shape):
+                        if dim == 1:
+                            grad_self = grad_self.sum(axis=i, keepdims=True)
                 self.grad += grad_self
 
             if other.requires_grad:
                 if other.grad is None:
                     other.grad = np.zeros_like(other.data)
                 grad_other = out.grad
-                if grad_other.shape != other.data.shape:
-                    grad_other = np.sum(grad_other, axis=0, keepdims=True)
-                    grad_other = np.squeeze(grad_other)
-                    if other.shape == (): grad_other = np.sum(grad_other)
+                if grad_other.shape != other.shape:
+                    axis = tuple(range(len(grad_other.shape) - len(other.shape)))
+                    grad_other = grad_other.sum(axis=axis)
+                    for i, dim in enumerate(other.shape):
+                        if dim == 1:
+                            grad_other = grad_other.sum(axis=i, keepdims=True)
                 other.grad += grad_other
 
         if self.requires_grad or other.requires_grad:
@@ -446,20 +449,25 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
+                max_value = np.max(self.data, axis=axis, keepdims=keepdims)
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
                 if axis is None:
                     grad_mask = self.data == max_value
                 else:
-                    grad_mask = self.data == np.expand_dims(max_value, axis=axis)
+                    if max_value.ndim == 1:
+                        max_value = np.expand_dims(max_value, axis=axis)
+                        out.grad = np.expand_dims(out.grad, axis=axis)
+                        print(max_value.shape)
+                    grad_mask = self.data == max_value #np.expand_dims(max_value, axis=axis)
                 self.grad += grad_mask * out.grad
 
         if self.requires_grad:
+            out.requires_grad = True
             out._backward = _backward
             out.grad_fn = "MaxBackward"
 
         return out
-
     
     def min(self, axis=None, keepdims=False):
         min_value = np.min(self.data, axis=axis, keepdims=keepdims)
@@ -472,7 +480,10 @@ class Tensor:
                 if axis is None:
                     grad_mask = self.data == min_value
                 else:
-                    grad_mask = self.data == np.expand_dims(min_value, axis=axis)
+                    if min_value.ndim == 1:
+                        min_value = np.expand_dims(min_value, axis=axis)
+                        out.grad = np.expand_dims(out.grad, axis=axis)
+                    grad_mask = self.data == min_value
                 self.grad += grad_mask * out.grad
 
         if self.requires_grad:
@@ -480,6 +491,58 @@ class Tensor:
             out.grad_fn = "MinBackward"
 
         return out
+    
+    def maximum(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(np.full_like(self.data, other))
+        out = Tensor(np.maximum(self.data, other.data), requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                grad_self = out.grad * (self.data >= other.data)
+                self.grad += grad_self
+            if other.requires_grad:
+                if other.grad is None:
+                    other.grad = np.zeros_like(other.data)
+                grad_other = out.grad * (self.data < other.data)
+                other.grad += grad_other
+
+        if self.requires_grad or other.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "MaximumBackward"
+
+        return out
+
+    def minimum(self, other):
+        if not isinstance(other, Tensor):
+            other = Tensor(np.full_like(self.data, other))
+        out = Tensor(np.minimum(self.data, other.data), requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                grad_self = out.grad * (self.data <= other.data)
+                self.grad += grad_self
+            if other.requires_grad:
+                if other.grad is None:
+                    other.grad = np.zeros_like(other.data)
+                grad_other = out.grad * (self.data > other.data)
+                other.grad += grad_other
+
+        if self.requires_grad or other.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "MinimumBackward"
+
+        return out
+
+    def clip(self, min_, max_):
+        return self.maximum(min_).minimum(max_)
+    
 
     def flatten(self, start_dim, end_dim=-1):
         x = self.data
@@ -584,7 +647,7 @@ class Tensor:
     def __getitem__(self, index):
         if isinstance(index, Tensor):
             index = index.data
-        
+
         result = self.data[index]
         out = Tensor(result, _prev=(self,))
 
@@ -593,18 +656,25 @@ class Tensor:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
                 grad_output = np.zeros_like(self.data)
+
                 if isinstance(index, slice):
                     grad_output[index] = out.grad
-
-                elif isinstance(index, np.ndarray) and index.dtype == np.bool:
+                elif isinstance(index, np.ndarray):
+                    if index.dtype == np.bool or np.issubdtype(index.dtype, np.integer):
+                        np.add.at(grad_output, index, out.grad)
+                    else:
+                        raise NotImplementedError(f"Unsupported indexing type for gradients: {index.dtype}")
+                elif isinstance(index, tuple):
                     grad_output[index] = out.grad
-
-                elif isinstance(index, np.ndarray) and index.dtype == np.int:
-                    np.add.at(grad_output, index, out.grad)
-
                 else:
-                    raise NotImplementedError("Unsupported indexing type for gradients.")
-                
+                    raise NotImplementedError(f"Unsupported indexing type for gradients: {type(index)}")
+
+                # Ensure grad_output is properly broadcasted to match the shape of self.data
+                if grad_output.shape != self.data.shape:
+                    for i in range(len(self.data.shape)):
+                        if self.data.shape[i] != grad_output.shape[i]:
+                            grad_output = np.sum(grad_output, axis=i, keepdims=True)
+
                 self.grad += grad_output
 
         if self.requires_grad:
