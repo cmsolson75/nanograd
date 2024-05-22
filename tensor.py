@@ -17,7 +17,6 @@ class Tensor:
     # Creational ops
     # --------------
 
-
     @classmethod
     def kaiming_uniform(cls, in_dims, out_dims, gain: float = math.sqrt(5), **kwargs):
         """
@@ -45,14 +44,22 @@ class Tensor:
             if len(weight.shape) == 1:
                 return weight.shape[0]
             else:
-                return weight.shape[1]  # Assuming weights are shaped (out_dims, in_dims)
+                return weight.shape[
+                    1
+                ]  # Assuming weights are shaped (out_dims, in_dims)
 
-        fan_in = calculate_fan_in(np.zeros((out_dims, in_dims)))  # Create a dummy weight for fan calculation
+        fan_in = calculate_fan_in(
+            np.zeros((out_dims, in_dims))
+        )  # Create a dummy weight for fan calculation
 
-        bound = np.sqrt(3.0) * np.sqrt(2.0 / (1 + gain**2)) / np.sqrt(fan_in)  # Compute the correct boundary for uniform distribution
-        data = np.random.uniform(-bound, bound, size=(in_dims, out_dims))  # Notice the size parameter
+        bound = (
+            np.sqrt(3.0) * np.sqrt(2.0 / (1 + gain**2)) / np.sqrt(fan_in)
+        )  # Compute the correct boundary for uniform distribution
+        data = np.random.uniform(
+            -bound, bound, size=(in_dims, out_dims)
+        )  # Notice the size parameter
         return cls(data, **kwargs)
-    
+
     def kaiming_normal(self):
         pass
 
@@ -61,7 +68,7 @@ class Tensor:
 
     def xavier_normal(self):
         pass
-    
+
     @classmethod
     def zeros(cls, shape: tuple, **kwargs):
         return cls(np.zeros(shape), **kwargs)
@@ -109,11 +116,11 @@ class Tensor:
     @property
     def ndims(self):
         return len(self.shape)
-    
+
     @property
     def dtype(self):
         return self.data.dtype
-    
+
     @property
     def numpy(self):
         return self.data
@@ -154,7 +161,11 @@ class Tensor:
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
-        out = Tensor(self.data + other.data, requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
+        out = Tensor(
+            self.data + other.data,
+            requires_grad=self.requires_grad or other.requires_grad,
+            _prev=(self, other),
+        )
 
         def _backward():
             if self.requires_grad:
@@ -187,7 +198,6 @@ class Tensor:
             out.grad_fn = "AddBackward"
 
         return out
-
 
     def __mul__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -302,20 +312,19 @@ class Tensor:
             out._backward = _backward
             out.grad_fn = "SigmoidBackward"
         return out
-    
+
     def softmax(self, axis=-1):
         # for stability
         m = self - self.max(axis=axis, keepdims=True)
         e = m.exp()
         return e / e.sum()
-    
+
     def log_softmax(self, axis=-1):
         max_tensor = self.max(axis=axis, keepdims=True)
         m = self - max_tensor
         e = m.exp()
         s = e.sum(axis=axis, keepdims=True)
         return m - s.log()
-
 
     def swish(self):
         # I think this will work
@@ -326,7 +335,7 @@ class Tensor:
 
     # ******standard*******
     def transpose(self):
-        out = Tensor(np.transpose(self.data), _prev=(self, ))
+        out = Tensor(np.transpose(self.data), _prev=(self,))
 
         def _backward():
             if self.requires_grad:
@@ -387,7 +396,7 @@ class Tensor:
             out._backward = _backward
             out.grad_fn = "SinBackward"
         return out
-    
+
     def square(self):
         return self**2
 
@@ -404,7 +413,7 @@ class Tensor:
             out.requires_grad = True
             out._backward = _backward
             out.grad_fn = "AbsBackward"
-        
+
         return out
 
     # ----------
@@ -446,7 +455,7 @@ class Tensor:
             out.grad_fn = "MeanBackward"
 
         return out
-    
+
     def std(self):
         # Make this back propable
         return self.data.std()
@@ -467,7 +476,9 @@ class Tensor:
                         max_value = np.expand_dims(max_value, axis=axis)
                         out.grad = np.expand_dims(out.grad, axis=axis)
                         print(max_value.shape)
-                    grad_mask = self.data == max_value #np.expand_dims(max_value, axis=axis)
+                    grad_mask = (
+                        self.data == max_value
+                    )  # np.expand_dims(max_value, axis=axis)
                 self.grad += grad_mask * out.grad
 
         if self.requires_grad:
@@ -476,7 +487,7 @@ class Tensor:
             out.grad_fn = "MaxBackward"
 
         return out
-    
+
     def min(self, axis=None, keepdims=False):
         min_value = np.min(self.data, axis=axis, keepdims=keepdims)
         out = Tensor(min_value, _prev=(self,), requires_grad=self.requires_grad)
@@ -500,11 +511,15 @@ class Tensor:
             out.grad_fn = "MinBackward"
 
         return out
-    
+
     def maximum(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(np.full_like(self.data, other))
-        out = Tensor(np.maximum(self.data, other.data), requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
+        out = Tensor(
+            np.maximum(self.data, other.data),
+            requires_grad=self.requires_grad or other.requires_grad,
+            _prev=(self, other),
+        )
 
         def _backward():
             if self.requires_grad:
@@ -528,7 +543,11 @@ class Tensor:
     def minimum(self, other):
         if not isinstance(other, Tensor):
             other = Tensor(np.full_like(self.data, other))
-        out = Tensor(np.minimum(self.data, other.data), requires_grad=self.requires_grad or other.requires_grad, _prev=(self, other))
+        out = Tensor(
+            np.minimum(self.data, other.data),
+            requires_grad=self.requires_grad or other.requires_grad,
+            _prev=(self, other),
+        )
 
         def _backward():
             if self.requires_grad:
@@ -551,7 +570,6 @@ class Tensor:
 
     def clip(self, min_, max_):
         return self.maximum(min_).minimum(max_)
-    
 
     def flatten(self, start_dim, end_dim=-1):
         x = self.data
@@ -561,7 +579,7 @@ class Tensor:
         shape = (
             x.shape[:start_dim]
             + (np.prod(x.shape[start_dim : end_dim + 1]),)
-            + x.shape[end_dim + 1:]
+            + x.shape[end_dim + 1 :]
         )
         return self.reshape(shape)
 
@@ -634,6 +652,7 @@ class Tensor:
             out.grad_fn = "ShrinkBackward"
 
         return out
+
     # ----------
     # Functional nn ops
     # ----------
@@ -652,7 +671,7 @@ class Tensor:
         """Returns the indices of the minimum values along an axis."""
         indices = np.argmin(self.data, axis=axis)
         return indices
-    
+
     def __getitem__(self, index):
         if isinstance(index, Tensor):
             index = index.data
@@ -672,11 +691,15 @@ class Tensor:
                     if index.dtype == np.bool or np.issubdtype(index.dtype, np.integer):
                         np.add.at(grad_output, index, out.grad)
                     else:
-                        raise NotImplementedError(f"Unsupported indexing type for gradients: {index.dtype}")
+                        raise NotImplementedError(
+                            f"Unsupported indexing type for gradients: {index.dtype}"
+                        )
                 elif isinstance(index, tuple):
                     grad_output[index] = out.grad
                 else:
-                    raise NotImplementedError(f"Unsupported indexing type for gradients: {type(index)}")
+                    raise NotImplementedError(
+                        f"Unsupported indexing type for gradients: {type(index)}"
+                    )
 
                 # Ensure grad_output is properly broadcasted to match the shape of self.data
                 if grad_output.shape != self.data.shape:
@@ -693,7 +716,6 @@ class Tensor:
 
         return out
 
-    
     def __repr__(self):
         return f"tensor({self.data})"
 
