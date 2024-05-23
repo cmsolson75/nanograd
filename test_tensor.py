@@ -441,8 +441,6 @@ def assert_gradients_equal(tensor1, tensor2):
         (np.random.randn(2, 3), 1, False),
         (np.random.randn(4, 5), 0, True),
         (np.random.randn(4, 5), 1, True),
-        # (np.random.randn(4, 5, 6), (1, 2), True),
-        # (np.random.randn(4, 5, 6), (1, 2), False)
     ],
 )
 def test_max(x, axis, keepdims):

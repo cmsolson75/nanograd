@@ -31,3 +31,9 @@ TODO
 - Need to get full test coverage
 - Need to implement where functionality, just due to it being usefull in Huber
 - I want the framework to feel chainy, so you don't use Objects for anything other than layer stuf. also a Sequential. All of the class stuff is essentially going to be extensions for the class.
+
+
+
+Need to implement Reduction on all the losses
+
+Need to implement Huber Loss: this is the final loss to implement!!!

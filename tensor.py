@@ -124,8 +124,11 @@ class Tensor:
     @property
     def numpy(self):
         return self.data
-
+    
     @property
+    def size(self):
+        return self.data.size
+
     def item(self):
         return self.data.item()
 
@@ -415,7 +418,24 @@ class Tensor:
             out.grad_fn = "AbsBackward"
 
         return out
-
+    
+    def round(self):
+        rounded_data = np.round(self.data)
+        out = Tensor(rounded_data, _prev=[self])
+        
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                # For the gradient of the rounding function, we use a sub-gradient approach
+                self.grad += out.grad
+        
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "RoundBackward"
+        
+        return out
     # ----------
     # Reduce ops
     # ----------
@@ -653,6 +673,44 @@ class Tensor:
 
         return out
 
+    def squeeze(self, axis=None):
+        squeezed_data = np.squeeze(self.data, axis=axis)
+        out = Tensor(squeezed_data, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                expanded_grad = np.reshape(out.grad, self.data.shape)
+                self.grad += expanded_grad
+
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "SqueezeBackward"
+
+        return out
+    
+    def unsqueeze(self, axis):
+        unsqueezed_data = np.expand_dims(self.data, axis)
+        out = Tensor(unsqueezed_data, _prev=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                if self.grad is None:
+                    self.grad = np.zeros_like(self.data)
+                reduced_grad = np.squeeze(out.grad, axis=axis)
+                self.grad += reduced_grad
+
+        if self.requires_grad:
+            out.requires_grad = True
+            out._backward = _backward
+            out.grad_fn = "UnsqueezeBackward"
+
+        return out
+
+
+
     # ----------
     # Functional nn ops
     # ----------
@@ -671,6 +729,17 @@ class Tensor:
         """Returns the indices of the minimum values along an axis."""
         indices = np.argmin(self.data, axis=axis)
         return indices
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __eq__(self, other):
+        if isinstance(other, Tensor):
+            return Tensor(self.data == other.data)
+        return Tensor(self.data == other)
+    
+    def __hash__(self):
+        return id(self)
 
     def __getitem__(self, index):
         if isinstance(index, Tensor):
@@ -715,6 +784,17 @@ class Tensor:
             out.grad_fn = "IndexBackward"
 
         return out
+    
+    def __format__(self, format_spec):
+        """Format the Tensor's data according to the format_spec."""
+        if format_spec == "":
+            return str(self.data)
+        else:
+            formatted_data = np.array2string(self.data, formatter={
+                'float_kind': lambda x: format(x, format_spec),
+                'int_kind': lambda x: format(x, format_spec),
+            })
+            return formatted_data
 
     def __repr__(self):
         return f"tensor({self.data})"
