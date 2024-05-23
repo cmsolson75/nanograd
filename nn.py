@@ -289,6 +289,7 @@ class Loss:
     """
 
     # Should make a general reduction function due to all losses using it.
+    # Should probably make forward API like Module Has
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> Tensor:
         """
