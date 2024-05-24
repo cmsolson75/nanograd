@@ -29,11 +29,11 @@ Normalization
 
 TODO
 - Need to get full test coverage
-- Need to implement where functionality, just due to it being usefull in Huber
-- I want the framework to feel chainy, so you don't use Objects for anything other than layer stuf. also a Sequential. All of the class stuff is essentially going to be extensions for the class.
+
+TypeError: '<=' not supported between instances of 'Tensor' and 'float'
 
 
+Need to add in model.train & model.test as well as the context manager
 
-Need to implement Reduction on all the losses
 
-Need to implement Huber Loss: this is the final loss to implement!!!
+I wanna make a custom dtype for nano

@@ -83,8 +83,6 @@ class Linear(Module):
         return f"Linear({self.weight.shape})"
 
 
-
-
 class Sequential(Module):
     pass
 
@@ -121,7 +119,9 @@ class Optimizer:
     Base class for all optimizers.
     """
 
-    def __init__(self, parameters: Iterable[Tensor], lr: float, weight_decay: float = 0) -> None:
+    def __init__(
+        self, parameters: Iterable[Tensor], lr: float, weight_decay: float = 0
+    ) -> None:
         """
         Initializes the optimizer.
 
@@ -165,7 +165,13 @@ class SGD(Optimizer):
     """
 
     def __init__(
-        self, parameters: Iterable[Tensor], lr: float, momentum: float = 0, weight_decay: float = 0, dampening: float = 0, nesterov: bool = False
+        self,
+        parameters: Iterable[Tensor],
+        lr: float,
+        momentum: float = 0,
+        weight_decay: float = 0,
+        dampening: float = 0,
+        nesterov: bool = False,
     ) -> None:
         """
         Initializes the SGD optimizer.
@@ -227,6 +233,10 @@ class ADAGrad(Optimizer):
     pass
 
 
+class ADADelta(Optimizer):
+    pass
+
+
 # -----------------------------------------
 
 
@@ -248,6 +258,7 @@ class Cifar10(Dataset):
 
 # ------------------------------------------
 
+
 class DataLoader:
     def __init__(self, dataset, batch_size=1, shuffle=False):
         self.dataset = dataset
@@ -267,12 +278,12 @@ class DataLoader:
     def __next__(self):
         if self.current_index >= len(self.indices):
             raise StopIteration
-        
+
         start_index = self.current_index
         end_index = min(self.current_index + self.batch_size, len(self.indices))
         batch_indices = self.indices[start_index:end_index]
         batch = [self.dataset[i] for i in batch_indices]
-        
+
         self.current_index = end_index
         return batch
 
@@ -288,8 +299,12 @@ class Loss:
     Base class for all loss functions.
     """
 
-    # Should make a general reduction function due to all losses using it.
-    # Should probably make forward API like Module Has
+    def __init__(self, reduction: str = "mean"):
+        self.reduction = reduction
+
+    def _reduce(self, loss):
+        reduction_methods = {"mean": loss.mean, "sum": loss.sum, "none": lambda: loss}
+        return reduction_methods.get(self.reduction, reduction_methods["none"])()
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> Tensor:
         """
@@ -313,6 +328,10 @@ class NLLLoss(Loss):
     Negative Log Likelihood loss.
     """
 
+    def __init__(self, weight: Tensor = None, reduction: str = "mean"):
+        super().__init__(reduction)
+        self.weight = weight
+
     def __call__(self, y_hat: Tensor, y: Tensor) -> float:
         """
         Computes the Negative Log Likelihood loss.
@@ -326,16 +345,19 @@ class NLLLoss(Loss):
         """
         N = y_hat.data.shape[0]
         log_probs = y_hat
-        nll = (-log_probs[np.arange(N), y.data]).mean()
-        return nll
+        nll = -log_probs[np.arange(N), y.data]
+        if self.weight is not None:
+            nll *= self.weight[y.data]
+        return self._reduce(nll)
 
 
 class MSELoss(Loss):
     """
     Mean Squared Error loss.
     """
-    def __init__(self, reduction: str = 'mean') -> None:
-        self.reduction = reduction
+
+    def __init__(self, reduction: str = "mean") -> None:
+        super().__init__(reduction)
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> float:
         """
@@ -349,15 +371,7 @@ class MSELoss(Loss):
             float: Computed loss.
         """
         loss = (y_hat - y).square()
-
-        if self.reduction == 'mean':
-            reduced_loss = loss.mean()
-        elif self.reduction == 'sum':
-            reduced_loss = loss.sum()
-        else:
-            reduced_loss = loss
-
-        return reduced_loss
+        return self._reduce(loss)
 
 
 class BCELoss(Loss):
@@ -365,14 +379,16 @@ class BCELoss(Loss):
     Binary Cross-Entropy loss.
     """
 
-    def __init__(self, reduction: str = 'mean') -> None:
+    def __init__(self, weight: Tensor = None, reduction: str = "mean") -> None:
         """
         Initializes the BCELoss with the specified reduction method.
 
         Args:
+            weight (Tensor, optional): Manual rescaling weight given to each class.
             reduction (str): Specifies the reduction to apply to the output: 'mean' | 'sum' | 'none'.
         """
-        self.reduction = reduction
+        super().__init__(reduction)
+        self.weight = weight
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> Tensor:
         """
@@ -388,21 +404,19 @@ class BCELoss(Loss):
         epsilon = 1e-6
         y_hat = y_hat.clip(epsilon, 1 - epsilon)
         loss = -(y * y_hat.log() + (1 - y) * (1 - y_hat).log())
-
-        if self.reduction == 'mean':
-            reduced_loss = loss.mean()
-        elif self.reduction == 'sum':
-            reduced_loss = loss.sum()
-        else:
-            reduced_loss = loss
-
-        return reduced_loss
+        if self.weight is not None:
+            loss *= self.weight
+        return self._reduce(loss)
 
 
 class CrossEntropyLoss(Loss):
     """
     Cross-Entropy loss.
     """
+
+    def __init__(self, weight: Tensor = None, reduction: str = "mean") -> None:
+        super().__init__(reduction)
+        self.weight = weight
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> float:
         """
@@ -416,7 +430,7 @@ class CrossEntropyLoss(Loss):
             float: Computed loss.
         """
         log_prob = y_hat.log_softmax(axis=1)
-        loss = NLLLoss()(log_prob, y)
+        loss = NLLLoss(self.weight, self.reduction)(log_prob, y)
         return loss
 
 
@@ -424,6 +438,9 @@ class L1Loss(Loss):
     """
     L1 loss (Mean Absolute Error).
     """
+
+    def __init__(self, reduction: str = "mean") -> None:
+        super().__init__(reduction)
 
     def __call__(self, y_hat: Tensor, y: Tensor) -> float:
         """
@@ -436,11 +453,43 @@ class L1Loss(Loss):
         Returns:
             float: Computed loss.
         """
-        loss = (y_hat - y).abs().mean()
-        return loss
+        loss = (y_hat - y).abs()
+        return self._reduce(loss)
 
-class HuberLoss:
-    pass
+
+class HuberLoss(Loss):
+    """
+    Huber loss.
+    """
+
+    def __init__(self, delta: float = 1.0, reduction: str = "mean") -> None:
+        """
+        Initializes the HuberLoss with the specified delta and reduction method.
+
+        Args:
+            delta (float): The threshold at which to change between delta-scaled MAE and MSE.
+            reduction (str): Specifies the reduction to apply to the output: 'mean' | 'sum' | 'none'.
+        """
+        super().__init__(reduction)
+        self.delta = delta
+
+    def __call__(self, y_hat: Tensor, y: Tensor) -> float:
+        """
+        Computes the Huber loss.
+
+        Args:
+            y_hat (Tensor): Predicted values.
+            y (Tensor): True values.
+
+        Returns:
+            float: Computed loss.
+        """
+        error = y_hat - y
+        abs_error = error.abs()
+        quadratic = 0.5 * error.square()
+        linear = self.delta * (abs_error - 0.5 * self.delta)
+        loss = quadratic.where(abs_error.data <= self.delta, linear)
+        return self._reduce(loss)
 
 
 # ---------------

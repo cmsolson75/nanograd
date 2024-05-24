@@ -436,6 +436,54 @@ class Tensor:
             out.grad_fn = "RoundBackward"
         
         return out
+    
+    # ---------
+    # Ternary ops
+    # ---------
+
+
+    def where(self, condition, y):
+        """
+        Element-wise selection from self or y depending on the condition.
+        
+        Args:
+            condition (Tensor): Condition tensor, same shape as self.
+            y (Tensor): Alternative values, same shape as self.
+
+        Returns:
+            Tensor: Resulting tensor with elements from self where condition is True, else from y.
+        """
+        if not isinstance(condition, Tensor):
+            condition = Tensor(condition)
+        if not isinstance(y, Tensor):
+            y = Tensor(y)
+
+        out = Tensor(np.where(condition.data, self.data, y.data), requires_grad=self.requires_grad or y.requires_grad, _prev=(self, condition, y))
+
+        def _backward():
+            if condition.requires_grad or self.requires_grad or y.requires_grad:
+                if out.grad is None:
+                    return
+                if condition.requires_grad:
+                    if condition.grad is None:
+                        condition.grad = np.zeros_like(condition.data)
+                    # Gradient of where w.r.t. condition is zero (discontinuous function)
+                    condition.grad += np.zeros_like(condition.data)
+                if self.requires_grad:
+                    if self.grad is None:
+                        self.grad = np.zeros_like(self.data)
+                    self.grad += out.grad * condition.data
+                if y.requires_grad:
+                    if y.grad is None:
+                        y.grad = np.zeros_like(y.data)
+                    y.grad += out.grad * (1 - condition.data)
+
+        if out.requires_grad:
+            out._backward = _backward
+            out.grad_fn = "WhereBackward"
+
+        return out
+
     # ----------
     # Reduce ops
     # ----------
@@ -723,12 +771,12 @@ class Tensor:
     def argmax(self, axis=None):
         """Returns the indices of the maximum values along an axis."""
         indices = np.argmax(self.data, axis=axis)
-        return indices
+        return Tensor(indices, _prev=(self, ), dtype=np.int64)
 
     def argmin(self, axis=None):
         """Returns the indices of the minimum values along an axis."""
         indices = np.argmin(self.data, axis=axis)
-        return indices
+        return Tensor(indices, _prev=(self, ), dtype=np.int64)
     
     def __len__(self):
         return len(self.data)

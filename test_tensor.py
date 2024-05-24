@@ -412,26 +412,6 @@ def test_mixed_operations():
     assert_gradients_equal(t2, y_torch)
 
 
-import pytest
-import torch
-import numpy as np
-from tensor import Tensor  # Replace with the actual import
-
-EPSILON = 1e-6  # Tolerance for floating point comparison
-
-
-def assert_tensors_equal(tensor1, tensor2):
-    np.testing.assert_allclose(
-        tensor1.data, tensor2.detach().numpy(), rtol=EPSILON, atol=EPSILON
-    )
-
-
-def assert_gradients_equal(tensor1, tensor2):
-    np.testing.assert_allclose(
-        tensor1.grad, tensor2.grad.detach().numpy(), rtol=EPSILON, atol=EPSILON
-    )
-
-
 @pytest.mark.parametrize(
     "x, axis, keepdims",
     [
