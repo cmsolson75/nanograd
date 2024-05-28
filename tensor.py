@@ -16,6 +16,21 @@ class Tensor:
     # --------------
     # Creational ops
     # --------------
+    @staticmethod
+    def calculate_fan_in(weight):
+        """
+        Calculates the fan-in (number of incoming connections) for a weight tensor.
+
+        Args:
+            weight (np.ndarray or torch.Tensor): The weight tensor of a linear layer.
+
+        Returns:
+            int: The fan-in (number of incoming connections).
+        """
+        if len(weight.shape) == 1:
+            return weight.shape[0]
+        else:
+            return weight.shape[1]
 
     @classmethod
     def kaiming_uniform(cls, in_dims, out_dims, gain: float = math.sqrt(5), **kwargs):
@@ -31,24 +46,7 @@ class Tensor:
             numpy.ndarray: The initialized weights.
         """
 
-        def calculate_fan_in(weight):
-            """
-            Calculates the fan-in (number of incoming connections) for a weight tensor.
-
-            Args:
-                weight (np.ndarray or torch.Tensor): The weight tensor of a linear layer.
-
-            Returns:
-                int: The fan-in (number of incoming connections).
-            """
-            if len(weight.shape) == 1:
-                return weight.shape[0]
-            else:
-                return weight.shape[
-                    1
-                ]  # Assuming weights are shaped (out_dims, in_dims)
-
-        fan_in = calculate_fan_in(
+        fan_in = cls.calculate_fan_in(
             np.zeros((out_dims, in_dims))
         )  # Create a dummy weight for fan calculation
 
@@ -124,7 +122,7 @@ class Tensor:
     @property
     def numpy(self):
         return self.data
-    
+
     @property
     def size(self):
         return self.data.size
@@ -418,34 +416,33 @@ class Tensor:
             out.grad_fn = "AbsBackward"
 
         return out
-    
+
     def round(self):
         rounded_data = np.round(self.data)
         out = Tensor(rounded_data, _prev=[self])
-        
+
         def _backward():
             if self.requires_grad:
                 if self.grad is None:
                     self.grad = np.zeros_like(self.data)
                 # For the gradient of the rounding function, we use a sub-gradient approach
                 self.grad += out.grad
-        
+
         if self.requires_grad:
             out.requires_grad = True
             out._backward = _backward
             out.grad_fn = "RoundBackward"
-        
+
         return out
-    
+
     # ---------
     # Ternary ops
     # ---------
 
-
     def where(self, condition, y):
         """
         Element-wise selection from self or y depending on the condition.
-        
+
         Args:
             condition (Tensor): Condition tensor, same shape as self.
             y (Tensor): Alternative values, same shape as self.
@@ -458,7 +455,11 @@ class Tensor:
         if not isinstance(y, Tensor):
             y = Tensor(y)
 
-        out = Tensor(np.where(condition.data, self.data, y.data), requires_grad=self.requires_grad or y.requires_grad, _prev=(self, condition, y))
+        out = Tensor(
+            np.where(condition.data, self.data, y.data),
+            requires_grad=self.requires_grad or y.requires_grad,
+            _prev=(self, condition, y),
+        )
 
         def _backward():
             if condition.requires_grad or self.requires_grad or y.requires_grad:
@@ -543,7 +544,6 @@ class Tensor:
                     if max_value.ndim == 1:
                         max_value = np.expand_dims(max_value, axis=axis)
                         out.grad = np.expand_dims(out.grad, axis=axis)
-                        print(max_value.shape)
                     grad_mask = (
                         self.data == max_value
                     )  # np.expand_dims(max_value, axis=axis)
@@ -738,7 +738,7 @@ class Tensor:
             out.grad_fn = "SqueezeBackward"
 
         return out
-    
+
     def unsqueeze(self, axis):
         unsqueezed_data = np.expand_dims(self.data, axis)
         out = Tensor(unsqueezed_data, _prev=(self,))
@@ -757,8 +757,6 @@ class Tensor:
 
         return out
 
-
-
     # ----------
     # Functional nn ops
     # ----------
@@ -771,21 +769,21 @@ class Tensor:
     def argmax(self, axis=None):
         """Returns the indices of the maximum values along an axis."""
         indices = np.argmax(self.data, axis=axis)
-        return Tensor(indices, _prev=(self, ), dtype=np.int64)
+        return Tensor(indices, _prev=(self,), dtype=np.int64)
 
     def argmin(self, axis=None):
         """Returns the indices of the minimum values along an axis."""
         indices = np.argmin(self.data, axis=axis)
-        return Tensor(indices, _prev=(self, ), dtype=np.int64)
-    
+        return Tensor(indices, _prev=(self,), dtype=np.int64)
+
     def __len__(self):
         return len(self.data)
-    
+
     def __eq__(self, other):
         if isinstance(other, Tensor):
             return Tensor(self.data == other.data)
         return Tensor(self.data == other)
-    
+
     def __hash__(self):
         return id(self)
 
@@ -832,16 +830,19 @@ class Tensor:
             out.grad_fn = "IndexBackward"
 
         return out
-    
+
     def __format__(self, format_spec):
         """Format the Tensor's data according to the format_spec."""
         if format_spec == "":
             return str(self.data)
         else:
-            formatted_data = np.array2string(self.data, formatter={
-                'float_kind': lambda x: format(x, format_spec),
-                'int_kind': lambda x: format(x, format_spec),
-            })
+            formatted_data = np.array2string(
+                self.data,
+                formatter={
+                    "float_kind": lambda x: format(x, format_spec),
+                    "int_kind": lambda x: format(x, format_spec),
+                },
+            )
             return formatted_data
 
     def __repr__(self):
@@ -873,3 +874,19 @@ class Tensor:
     def backward(self):
         topo_sorted = self._topological_sort()
         self._compute_gradients(topo_sorted)
+
+# Dont know if you need this: Maybe refactor in later to the NN for implicet grad init.
+class Parameter(Tensor):
+    """
+    A special kind of tensor that is to be considered a module parameter.
+    """
+
+    def __init__(self, data: np.ndarray, requires_grad: bool = True):
+        """
+        Initializes a parameter.
+
+        Args:
+            data (np.ndarray): The data for the parameter.
+            requires_grad (bool): If True, gradients will be calculated for this parameter. Default is True.
+        """
+        super().__init__(data, requires_grad=requires_grad)

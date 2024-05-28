@@ -84,6 +84,7 @@ class Linear(Module):
 
 
 class Sequential(Module):
+    # Container class for Modules
     pass
 
 
@@ -511,7 +512,7 @@ class Dropout(Module):
 
 
 class ReLU(Module):
-    def __call__(self, x):
+    def forward(self, x):
         return x.relu()
 
 
@@ -520,10 +521,10 @@ class LeakyReLU(Module):
 
 
 class Tanh(Module):
-    def __call__(self, x):
+    def forward(self, x):
         return x.tanh()
 
 
 class Sigmoid(Module):
-    def __call__(self, x):
+    def forward(self, x):
         return x.sigmoid()
