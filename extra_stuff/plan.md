@@ -22,6 +22,16 @@ Normalization
     - https://www.cs.toronto.edu/~rsalakhu/papers/srivastava14a.pdf
 
 
+Graph basics: for autograd
+- Good book on it
+    - https://www.maths.ed.ac.uk/~v1ranick/papers/wilsongraph.pdf
+- https://medium.com/basecs/a-gentle-introduction-to-graph-theory-77969829ead8
+- https://www.geeksforgeeks.org/mathematics-graph-theory-basics-set-1/#
+- Good video on it: https://youtu.be/LFKZLXVO-Dg?si=QFYH6ELvdGx0TOvZ
+- DFS: https://youtu.be/PMMc4VsIacU?si=VTQ8Uy-yDDVEyVnE
+- Topo Sort: https://youtu.be/eL-KzMXSXXI?si=qReJnp8Dj5x23Jhy
+
+
 
 
 TODO
@@ -42,6 +52,10 @@ Refactor of Tensor Class
         - Context: this is the computational graph
     - functions.py: has all the ops using the Function base implementation
     - tensor.py: general operations.
+- nn refactor
+    - module
+    - optim
+    - losses
 - Need to handle general broadcast cases
 
 
@@ -52,21 +66,6 @@ Why refactor:
 - Add all magic methods into framework: 
 
 
-Full functionality
-- Right hand ops
-    - __radd__: Right-hand addition.
-    - __rmul__: Right-hand multiplication.
-    - __rsub__: Right-hand subtraction.
-    - __rtruediv__: Right-hand true division.
-- Comparison
-    - __lt__: Less than.
-    - __le__: Less than or equal to.
-    - __gt__: Greater than.
-    - __ge__: Greater than or equal to.
-- Implement base operators that are separate from the python method: 
-    - Example: add(): this would have the add functionality, then you also have __add__(self, a, b): return add(a, b) I think this might help implementation details, and allow different calls of objects.
-
-
 Path:
 - Refactor codebase: I am at a good place where I have tested against pytorch and can match it in nano networks.
 - This refactor should make it more modulare and easier to extend to other functions
@@ -74,3 +73,7 @@ Path:
 - Be able to explain the full codebase before moving onto MNIST
 - Add in train and eval mode
 - Add in context managment. with nano.no_grad() etc
+- Make sure dataclass is fully working. as well as data loader, play with in Pytorch to understand the implementation requirments. Look for non standard functionality similar to reductions in the loss functions.
+- MNIST: Get it training
+- Implement a basic MNIST algorithm
+- Start setting up API for codebase: so clear out unessasary stuff.

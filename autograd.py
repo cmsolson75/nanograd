@@ -1,32 +1,36 @@
-from tensor import Tensor
+# from tensor_refactor import Tensor
+# import numpy as np
 
-class Function:
-    @staticmethod
-    def forward(ctx, *args):
-        raise NotImplementedError
+# class Function:
+#     @staticmethod
+#     def forward(ctx, *args):
+#         raise NotImplementedError
 
-    @staticmethod
-    def backward(ctx, *grad_outputs):
-        raise NotImplementedError
+#     @staticmethod
+#     def backward(ctx, *grad_outputs):
+#         raise NotImplementedError
 
-    @classmethod
-    def apply(cls, *args):
-        ctx = Context()
-        ctx.parents = [arg for arg in args if isinstance(arg, Tensor)]
-        ctx.saved_tensors = []
-        output = cls.forward(ctx, *args)
-        output = Tensor(output)
-        output._ctx = ctx
-        output.grad_fn = cls
-        return output
+#     @classmethod
+#     def apply(cls, *args):
+#         ctx = Context()
+#         ctx.parents = [arg for arg in args if isinstance(arg, Tensor)]
+#         ctx.saved_tensors = []
+#         output = cls.forward(ctx, *args)
+#         requires_grad = any(arg.requires_grad for arg in args if isinstance(arg, Tensor))
+#         output = Tensor(output, requires_grad=requires_grad)
+#         print(output)
+#         output._ctx = ctx
+#         output.grad_fn = cls
+#         return output
 
-class Context:
-    def __init__(self):
-        self.parents = []
-        self.saved_tensors = []
 
-    def save_for_backward(self, *tensors):
-        self.saved_tensors.extend(tensors)
+# class Context:
+#     def __init__(self):
+#         self.parents = []
+#         self.saved_tensors = []
+
+#     def save_for_backward(self, *tensors):
+#         self.saved_tensors.extend(tensors)
 
 
 # Example backward implmeentation in tensor.
