@@ -217,6 +217,13 @@ class SGD(Optimizer):
 
                 param.data -= self.learning_rate * grad
 
+class ADAGrad(Optimizer):
+    pass
+
+
+class ADADelta(Optimizer):
+    pass
+
 
 class RMSProp(Optimizer):
     pass
@@ -227,14 +234,6 @@ class Adam(Optimizer):
 
 
 class AdamW(Adam):  # Probably extends the adam class
-    pass
-
-
-class ADAGrad(Optimizer):
-    pass
-
-
-class ADADelta(Optimizer):
     pass
 
 

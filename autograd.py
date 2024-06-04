@@ -32,8 +32,6 @@
 #     def save_for_backward(self, *tensors):
 #         self.saved_tensors.extend(tensors)
 
-
-# Example backward implmeentation in tensor.
 """
 def backward(self, grad_output=None):
     if grad_output is None:
