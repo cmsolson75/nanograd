@@ -23,6 +23,8 @@ class Function:
         result = Tensor(output, requires_grad=requires_grad)
         result._ctx = ctx
         result._op = cls
+        if result.requires_grad:
+            result.grad_fn = f"{cls.__name__}Backward"
         return result
 
 # import at this point to stop circular imports
@@ -31,11 +33,14 @@ import functions as F
 
 class Context:
     def __init__(self):
-        self.parents = []
         self.saved_tensors = []
+        self.saved_attributes = {}
 
     def save_for_backward(self, *tensors):
         self.saved_tensors.extend(tensors)
+
+    def save_attribute(self, name, value):
+        self.saved_attributes[name] = value
 
 
 class Tensor:
@@ -46,6 +51,7 @@ class Tensor:
         self.grad = None
         self.requires_grad = requires_grad
         self._ctx = None
+        self._op = None
         self.grad_fn = None
 
     @property
@@ -74,6 +80,9 @@ class Tensor:
 
     def item(self):
         return self.data.item()
+    
+    def clone(self):
+        return F.Copy.apply(self)
 
     # Backward methods
     def backward(self, grad_output=None):
@@ -110,7 +119,6 @@ class Tensor:
             if tensor._ctx is not None and tensor._op is not None:
                 grads = tensor._op.backward(tensor._ctx, tensor.grad)
                 if len(tensor._ctx.saved_tensors) == 1:
-                    print(grads.shape)
                     grads = [grads]
                 for parent, grad in zip(tensor._ctx.saved_tensors, grads):
                     if isinstance(parent, Tensor) and parent.requires_grad:
@@ -129,9 +137,12 @@ class Tensor:
     
     # ----------
     # Creational Ops
+    # Use init module for this
     # ----------
     @classmethod
     def kaiming_uniform(cls, in_dims, out_dims, gain: float = math.sqrt(5), **kwargs):
+        # example
+        # init.kaiming_uniform(etc)
         pass
 
     @classmethod
@@ -178,9 +189,12 @@ class Tensor:
     @classmethod
     def arange(cls, start, stop, step, **kwargs):
         return cls(np.arange(start, stop, step), **kwargs)
+    
+    @classmethod
+    def linspace(cls, start, stop, step, **kwargs):
+        pass
 
     
-
     # ----------
     # Unnary Ops
     # ----------
@@ -211,17 +225,14 @@ class Tensor:
         pass
 
     # ----- standard -------
-    def transpose(self):
-        pass
-
     def exp(self):
-        pass
+        return F.Exp.apply(self)
 
     def exp2(self):
         pass
 
     def log(self):
-        pass
+        return F.Log.apply(self)
 
     def log2(self):
         pass
@@ -233,7 +244,7 @@ class Tensor:
         pass
 
     def sin(self):
-        pass
+        return F.Sin.apply(self)
 
     def cos(self):
         pass
@@ -245,17 +256,19 @@ class Tensor:
         return self * self
 
     def abs(self):
-        pass
+        return F.Abs.apply(self)
 
     def round(self):
-        pass
+        return F.Round.apply(self)
 
     def ceil(self):
-        pass
+        return F.Ceil.apply(self)
 
     def floor(self):
-        pass
+        return F.Floor.apply(self)
 
+    def reciprocal(self):
+        return F.Reciprocal.apply(self)
     # ----------
     # Binary Ops
     # ----------
@@ -312,29 +325,37 @@ class Tensor:
     # ----------
 
     def where(self, condition, y):
-        pass
+        return F.Where.apply(condition, self, y)
 
     # ----------
     # Reduce Ops
     # ----------
-    
+
     def sum(self, axis=None, keepdims=False):
         return F.Sum.apply(self, axis=axis, keepdims=keepdims)
 
     def mean(self, axis=None, keepdims=False):
         return F.Mean.apply(self, axis=axis, keepdims=keepdims)
 
-    def maximum(self):
+    def var(self):
         pass
 
-    def minimum(self):
+    def std(self):
         pass
 
-    def max(self):
-        pass
+    def maximum(self, other):
+        other = self._ensure_tensor(other)
+        return F.Maximum.apply(self, other)
 
-    def min(self):
-        pass
+    def minimum(self, other):
+        other = self._ensure_tensor(other)
+        return F.Minimum.apply(self, other)
+
+    def max(self, axis=None, keepdims=False):
+        return F.Max.apply(self, axis=axis, keepdims=keepdims)
+
+    def min(self, axis=None, keepdims=False):
+        return F.Min.apply(self, axis=axis, keepdims=keepdims)
 
     def clip(self):
         pass
@@ -351,7 +372,10 @@ class Tensor:
         pass
 
     def reshape(self, *shape):
-        pass
+            return F.Reshape.apply(self, shape)
+
+    def transpose(self, axes=None):
+        return F.Transpose.apply(self, axes)
 
     def pad(self, pad_width, contant_values=0):
         pass
@@ -366,11 +390,34 @@ class Tensor:
         pass
 
     def __getitem__(self, index):
-        pass
+        return F.Slice.apply(self, index)
 
-    def __setitem__(self, morestuff):
-        pass
+    def __setitem__(self, index, value):
+        # Check if the tensor is a view of a leaf tensor that requires gradients
+        if self.requires_grad and self.grad_fn is None and self._ctx is not None:
+            raise RuntimeError(
+                "A view of a leaf Tensor that requires grad is being used in an in-place operation."
+            )
 
+        # Check if the tensor has been cloned
+        if not self.grad_fn or "CopyBackward" not in self.grad_fn:
+            raise RuntimeError("Tensor must be cloned before using setitem operation.")
+
+        value = self._ensure_tensor(value)
+
+        # Apply SetItem operation
+        original_ctx = self._ctx
+        result = F.SetItem.apply(self, index, value)
+        self.data = result.data
+
+        # Modify directly
+        self._ctx = result._ctx
+
+        # Maintain history
+        self._ctx.saved_tensors[0] = original_ctx.saved_tensors[0]
+
+        self._op = result._op
+        self.grad_fn = result.grad_fn
     # ----------
     # Utility Ops
     # ----------
@@ -404,5 +451,11 @@ class Tensor:
             return formatted_data
 
 
+
     def __repr__(self):
-        return f"tensor({self.data})"
+        info = f"tensor({self.data})"
+        if self.requires_grad:
+            info += f", requires_grad={self.requires_grad}"
+        if self.grad_fn:
+            info += f", grad_fn={self.grad_fn}"
+        return info

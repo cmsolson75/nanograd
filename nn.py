@@ -53,6 +53,7 @@ class Linear(Module):
     """
     Linear layer (fully connected layer).
     """
+    # posibly implement a linear function to use speedups
 
     def __init__(self, in_dims: int, out_dims: int) -> None:
         """
@@ -500,6 +501,10 @@ class BatchNorm1d(Module):
 
 
 class BatchNorm2d(Module):
+    pass
+
+
+class LayerNorm(Module):
     pass
 
 
