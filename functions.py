@@ -35,30 +35,31 @@ class Slice(Function):
     @staticmethod
     def forward(ctx, a, index):
         ctx.save_for_backward(a)
-        ctx.index = index
+        ctx.save_attribute("index", index)
         return a.data[index]
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        index = ctx.index
-        grad_a = np.zeros_like(a.data)
-
-        if isinstance(index, slice):
-            grad_a[index] = grad_output
-        elif isinstance(index, np.ndarray):
-            if index.dtype == np.bool or np.issubdtype(index.dtype, np.integer):
-                np.add.at(grad_a, index, grad_output)
+        index = ctx.saved_attributes["index"]
+        grad_a = None
+        if a.requires_grad:
+            grad_a = np.zeros_like(a.data)
+            if isinstance(index, slice):
+                grad_a[index] = grad_output
+            elif isinstance(index, np.ndarray):
+                if index.dtype == np.bool or np.issubdtype(index.dtype, np.integer):
+                    np.add.at(grad_a, index, grad_output)
+                else:
+                    raise NotImplementedError(
+                        f"Unsupported indexing type for gradients: {index.dtype}"
+                    )
+            elif isinstance(index, tuple):
+                grad_a[index] = grad_output
             else:
                 raise NotImplementedError(
-                    f"Unsupported indexing type for gradients: {index.dtype}"
+                    f"Unsupported indexing type for gradients: {type(index)}"
                 )
-        elif isinstance(index, tuple):
-            grad_a[index] = grad_output
-        else:
-            raise NotImplementedError(
-                f"Unsupported indexing type for gradients: {type(index)}"
-            )
 
         return grad_a
 
@@ -73,35 +74,31 @@ class Copy(Function):
     def backward(ctx, grad_output):
         print(grad_output)
         (a,) = ctx.saved_tensors
-        grad_a = grad_output
+        grad_a = grad_output if a.requires_grad else None
         return grad_a
 
 
-# COPY USED for this
 class SetItem(Function):
     @staticmethod
     def forward(ctx, a, index, value):
         ctx.save_for_backward(a, value)
         ctx.save_attribute("index", index)
-        result = a.data
-        # Check if value.data is a scalar
         if np.isscalar(value.data) or value.data.size == 1:
-            result[index] = value.data.item()
+            a.data[index] = value.data.item()
         else:
-            result[index] = value.data
+            a.data[index] = value.data
 
-        return result.data
+        return a.data
 
     @staticmethod
     def backward(ctx, grad_output):
         a, value = ctx.saved_tensors
         index = ctx.saved_attributes["index"]
+        grad_a = None
         if a.requires_grad:
             grad_a = np.array(grad_output, copy=True)
             # Zero out the gradient in the modified regions
             grad_a[index] = 0
-        else:
-            grad_a = None
 
         # Initialize the gradient of the value with the gradient output at the specified index
         grad_value = (
@@ -161,16 +158,50 @@ class Exp(Function):
 class Log(Function):
     @staticmethod
     def forward(ctx, a):
-        if np.any(a.data <= 0):
-            raise ValueError(f"Logarithm undefined for non-positive values {a.data}")
         ctx.save_for_backward(a)
-        return np.log(a.data)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            result = np.log(a.data)
+            result = np.where(a.data > 0, result, np.nan)  # Setting invalid results to NaN
+        return result
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        a_grad = (1 / a.data) * grad_output if a.requires_grad else None
-        return a_grad
+        with np.errstate(divide='ignore', invalid='ignore'):
+            grad_input = np.zeros_like(a.data)
+            positive_mask = a.data > 0
+            zero_or_negative_mask = a.data <= 0
+
+            # For positive values, the gradient is 1/x
+            grad_input[positive_mask] = grad_output[positive_mask] / a.data[positive_mask]
+            # Handle zero or negative values:
+            # Instead of setting gradient to `inf` or `nan`, propagate the gradient output scaled by a large negative value.
+            # This mimics the behavior observed in PyTorch, ensuring proper gradient propagation.
+            epsilon = 1e-15 # for avoiding -1/0
+            grad_input[zero_or_negative_mask] = grad_output[zero_or_negative_mask] * (-1.0 / np.abs(a.data[zero_or_negative_mask] + epsilon))
+
+        return grad_input
+
+class Sqrt(Function):
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        with np.errstate(invalid="ignore"):
+            result = np.sqrt(a.data)
+            result = np.where(np.isnan(result), np.nan, result)
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        (a,) = ctx.saved_tensors
+        grad_a = None
+        if a.requires_grad:
+            with np.errstate(invalid="ignore"):
+                grad_a = (0.5 / np.sqrt(a.data))
+                grad_a = np.where(np.isnan(grad_a), np.nan, grad_a)
+                grad_a = grad_a * grad_output # chain rule
+            grad_a = np.broadcast_to(grad_a, a.shape)
+        return grad_a
 
 
 class Sin(Function):
@@ -184,8 +215,7 @@ class Sin(Function):
         (a,) = ctx.saved_tensors
         grad_a = np.cos(a.data) * grad_output if a.requires_grad else None
         return grad_a
-
-
+    
 class Abs(Function):
     @staticmethod
     def forward(ctx, a):
@@ -195,7 +225,7 @@ class Abs(Function):
     @staticmethod
     def backward(ctx, grad_outputs):
         (a,) = ctx.saved_tensors
-        grad_a = np.sign(a.data) * grad_outputs
+        grad_a = np.sign(a.data) * grad_outputs if a.requires_grad else None
         return grad_a
 
 
@@ -207,7 +237,8 @@ class Round(Function):
 
     @staticmethod
     def backward(ctx, grad_outputs):
-        grad_a = np.zeros_like(grad_outputs)
+        (a,) = ctx.saved_tensors
+        grad_a = np.zeros_like(grad_outputs) if a.requires_grad else None
         return grad_a
 
 
@@ -219,7 +250,8 @@ class Ceil(Function):
 
     @staticmethod
     def backward(ctx, grad_outputs):
-        grad_a = np.zeros_like(grad_outputs)
+        (a,) = ctx.saved_tensors
+        grad_a = np.zeros_like(grad_outputs) if a.requires_grad else None
         return grad_a
 
 
@@ -231,7 +263,8 @@ class Floor(Function):
 
     @staticmethod
     def backward(ctx, grad_outputs):
-        grad_a = np.zeros_like(grad_outputs)
+        (a,) = ctx.saved_tensors
+        grad_a = np.zeros_like(grad_outputs) if a.requires_grad else None
         return grad_a
 
 
@@ -399,19 +432,22 @@ class Mean(Function):
     @staticmethod
     def forward(ctx, a, axis=None, keepdims=False):
         ctx.save_for_backward(a)
-        ctx.axis = axis
-        ctx.keepdims = keepdims
+        ctx.save_attribute("axis", axis)
+        ctx.save_attribute("keepdims", keepdims)
         return np.mean(a.data, axis=axis, keepdims=keepdims)
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
+        axis = ctx.saved_attributes["axis"]
+        keepdims = ctx.saved_attributes["keepdims"]
+
         a_grad = None
         if a.requires_grad:
             a_grad = np.ones_like(a.data) / a.data.size
 
-            if ctx.axis is not None and not ctx.keepdims:
-                grad_output = np.expand_dims(grad_output, axis=ctx.axis)
+            if axis is not None and not keepdims:
+                grad_output = np.expand_dims(grad_output, axis=axis)
 
             a_grad *= grad_output
         return a_grad
@@ -420,21 +456,22 @@ class Mean(Function):
 class Max(Function):
     @staticmethod
     def forward(ctx, a, axis=None, keepdims=False):
-        ctx.axis = axis
-        ctx.keepdims = keepdims
-        max_value = np.max(a.data, axis=axis, keepdims=keepdims)
-        ctx.max_value = max_value  # save the computation
         ctx.save_for_backward(a)
+        max_value = np.max(a.data, axis=axis, keepdims=keepdims)
+        ctx.save_attribute("axis", axis)
+        ctx.save_attribute("keepdims", keepdims)
+        ctx.save_attribute("max_value", max_value)
         return max_value
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        axis = ctx.axis
-        keepdims = ctx.keepdims
+        axis = ctx.saved_attributes["axis"]
+        keepdims = ctx.saved_attributes["keepdims"]
+        max_value = ctx.saved_attributes["max_value"]
 
         grad_mask, grad_output = create_grad_mask(
-            a.data, ctx.max_value, grad_output, axis, keepdims, np.equal
+            a.data, max_value, grad_output, axis, keepdims, np.equal
         )
 
         grad_a = grad_mask * grad_output if a.requires_grad else None
@@ -445,20 +482,24 @@ class Min(Function):
     @staticmethod
     def forward(ctx, a, axis=None, keepdims=False):
         ctx.save_for_backward(a)
-        ctx.axis = axis
-        ctx.keepdims = keepdims
         min_value = np.min(a.data, axis=axis, keepdims=keepdims)
-        ctx.min_value = min_value
+
+        ctx.save_attribute("axis", axis)
+        ctx.save_attribute("keepdims", keepdims)
+        ctx.save_attribute("min_value", min_value)
+
         return min_value
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        axis = ctx.axis
-        keepdims = ctx.keepdims
+
+        axis = ctx.saved_attributes["axis"]
+        keepdims = ctx.saved_attributes["keepdims"]
+        min_value = ctx.saved_attributes["min_value"]
 
         grad_mask, grad_output = create_grad_mask(
-            a.data, ctx.min_value, grad_output, axis, keepdims, np.equal
+            a.data, min_value, grad_output, axis, keepdims, np.equal
         )
 
         grad_a = grad_mask * grad_output if a.requires_grad else None
@@ -516,31 +557,33 @@ class Reshape(Function):
     @staticmethod
     def forward(ctx, a, shape):
         ctx.save_for_backward(a)
-        ctx.original_shape = a.shape
+        ctx.save_attribute("original_shape", a.shape)
         return a.data.reshape(shape)
 
     @staticmethod
     def backward(ctx, grad_output):
-        grad_a = grad_output.reshape(ctx.original_shape)
+        (a,) = ctx.saved_tensors
+        original_shape = ctx.saved_attributes["original_shape"]
+        grad_a = grad_output.reshape(original_shape) if a.requires_grad else None
         return grad_a
 
 
 class Transpose(Function):
     @staticmethod
-    def forward(ctx, a, axes=None):
+    def forward(ctx, a, axis=None):
         ctx.save_for_backward(a)
-        ctx.axes = axes
-        return np.transpose(a.data, axes)
+        ctx.save_attribute("axis", axis)
+        return np.transpose(a.data, axis)
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        axes = ctx.axes
-        if axes is None:
-            axes = tuple(range(a.data.ndim))[::-1]
+        axis = ctx.saved_attributes["axis"]
+        if axis is None:
+            axis = tuple(range(a.data.ndim))[::-1]
         else:
-            axes = np.argsort(axes)
-        grad_a = np.transpose(grad_output, axes)
+            axis = np.argsort(axis)
+        grad_a = np.transpose(grad_output, axis) if a.requires_grad else None
         return grad_a
 
 
@@ -561,18 +604,25 @@ class Shrink(Function):
 class Where(Function):
     @staticmethod
     def forward(ctx, condition, x, y):
-        ctx.condition = condition
+        ctx.save_attribute("condition", condition)
         ctx.save_for_backward(x, y)
         return np.where(condition.data, x.data, y.data)
 
     @staticmethod
     def backward(ctx, grad_output):
         x, y = ctx.saved_tensors
-        grad_x = np.where(ctx.condition.data, grad_output, 0)
-        grad_y = np.where(ctx.condition.data, 0, grad_output)
-        # Ensure the gradients are broadcasted correctly
-        if grad_x.shape != x.data.shape:
-            grad_x = broadcast_gradient(grad_x, x.data.shape)
-        if grad_y.shape != y.data.shape:
-            grad_y = broadcast_gradient(grad_y, y.data.shape)
+        condition = ctx.saved_attributes["condition"]
+        # init grads
+        grad_x, grad_y = None, None
+
+        if x.requires_grad:
+            grad_x = np.where(condition.data, grad_output, 0)
+            if grad_x.shape != x.data.shape:
+                grad_x = broadcast_gradient(grad_x, x.data.shape)
+
+        if y.requires_grad:
+            grad_y = np.where(condition.data, 0, grad_output)
+            if grad_y.shape != y.data.shape:
+                grad_y = broadcast_gradient(grad_y, y.data.shape)
+
         return grad_x, grad_y

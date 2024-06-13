@@ -1,6 +1,7 @@
 import numpy as np
 import math
 
+import initializers as init
 # Need to add typing
 
 
@@ -24,8 +25,10 @@ class Function:
         result._ctx = ctx
         result._op = cls
         if result.requires_grad:
+            # pytorch api & debug
             result.grad_fn = f"{cls.__name__}Backward"
         return result
+
 
 # import at this point to stop circular imports
 import functions as F
@@ -73,16 +76,13 @@ class Tensor:
     @property
     def size(self):
         return self.data.size
-    
+
     @property
     def T(self):
         return self.transpose()
 
     def item(self):
         return self.data.item()
-    
-    def clone(self):
-        return F.Copy.apply(self)
 
     # Backward methods
     def backward(self, grad_output=None):
@@ -126,6 +126,11 @@ class Tensor:
                             parent.grad = np.zeros_like(parent.data)
                         parent.grad += grad
 
+    #
+    @staticmethod
+    def _create_tensor(data, requires_grad=False, dtype=np.float32):
+        return Tensor(data, requires_grad=requires_grad, dtype=dtype)
+
     @staticmethod
     def _ensure_tensor(x):
         return x if isinstance(x, Tensor) else Tensor(x)
@@ -134,123 +139,239 @@ class Tensor:
     def _check_scalar(x):
         assert isinstance(x, (float, int))
 
-    
     # ----------
     # Creational Ops
-    # Use init module for this
     # ----------
     @classmethod
-    def kaiming_uniform(cls, in_dims, out_dims, gain: float = math.sqrt(5), **kwargs):
-        # example
-        # init.kaiming_uniform(etc)
-        pass
+    def kaiming_uniform(cls, shape, gain=math.sqrt(5), mode='fan_in', requires_grad=False, dtype=np.float32):
+        data = init.kaiming_uniform(shape, gain=gain, mode=mode)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def kaiming_normal(self):
-        pass
-    
-    @classmethod
-    def xavier_uniform(self):
-        pass
+    def kaiming_normal(cls, shape, gain=math.sqrt(5), mode='fan_in', requires_grad=False, dtype=np.float32):
+        data = init.kaiming_normal(shape, gain=gain, mode=mode)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def xavier_normal(self):
-        pass
+    def xavier_uniform(cls, shape, gain=1.0, requires_grad=False, dtype=np.float32):
+        data = init.xavier_uniform(shape, gain=gain)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def zeros(cls, shape: tuple, **kwargs):
-        return cls(np.zeros(shape), **kwargs)
+    def xavier_normal(cls, shape, gain=1.0, requires_grad=False, dtype=np.float32):
+        data = init.xavier_normal(shape, gain=gain)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def ones(cls, shape: tuple, **kwargs):
-        return cls(np.ones(shape), **kwargs)
+    def zeros(cls, shape, requires_grad=False, dtype=np.float32):
+        data = init.zeros(shape)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def eye(cls, N, M=None, k=0, **kwargs):
-        M = N if M is None else M
-        return cls(np.eye(N, M, k), **kwargs)
+    def ones(cls, shape, requires_grad=False, dtype=np.float32):
+        data = init.ones(shape)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def randn(cls, shape: tuple, **kwargs):
-        return cls(np.random.randn(*shape), **kwargs)
+    def eye(cls, shape, requires_grad=False, dtype=np.float32):
+        data = init.eye(shape)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def randint(cls, low, high=None, size=None, **kwargs):
-        return cls(np.random.randint(low=low, high=high, size=size), **kwargs)
+    def uniform(cls, shape, a=0.0, b=1.0, requires_grad=False, dtype=np.float32):
+        data = init.uniform(shape, a, b)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def uniform(cls, low, high=None, size=None, **kwargs):
-        return cls(np.random.uniform(low=low, high=high, size=size), **kwargs)
+    def normal(cls, shape, mean=0.0, std=1.0, requires_grad=False, dtype=np.float32):
+        data = init.normal(shape, mean, std)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def normal(cls, loc, scale=1.0, size=None, **kwargs):
-        return cls(np.random.normal(loc=loc, scale=scale, size=size), **kwargs)
+    def arange(cls, start, stop=None, step=1, dtype=None, requires_grad=False):
+        data = init.arange(start, stop, step, dtype)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def arange(cls, start, stop, step, **kwargs):
-        return cls(np.arange(start, stop, step), **kwargs)
-    
-    @classmethod
-    def linspace(cls, start, stop, step, **kwargs):
-        pass
+    def linspace(cls, start, stop, num=50, endpoint=True, retstep=False, dtype=None, requires_grad=False):
+        data = init.linspace(start, stop, num, endpoint, retstep, dtype)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
 
-    
+    @classmethod
+    def logspace(cls, start, stop, num=50, endpoint=True, base=10.0, dtype=None, requires_grad=False):
+        data = init.logspace(start, stop, num, endpoint, base, dtype)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
+
+    @classmethod
+    def full(cls, shape, fill_value, dtype=None, requires_grad=False):
+        data = init.full(shape, fill_value, dtype)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
+
+    @classmethod
+    def rand(cls, *shape, requires_grad=False, dtype=np.float32):
+        data = init.rand(shape)
+        return cls(data, requires_grad=requires_grad)
+
+    @classmethod
+    def randn(cls, *shape, requires_grad=False, dtype=np.float32):
+        data = init.randn(shape)
+        return cls(data, requires_grad=requires_grad)
+
+    @classmethod
+    def randint(cls, low, high=None, size=None, requires_grad=False, dtype=np.int32):
+        data = init.randint(low, high, size)
+        return cls(data, requires_grad=requires_grad)
+
     # ----------
     # Unnary Ops
     # ----------
 
     # ----- activations -------
     def relu(self):
+        """
+        Apply the Rectified Linear Unit (ReLU) activation function.
+
+        Returns:
+            Tensor: Tensor with ReLU applied element-wise.
+        """
         return F.ReLU.apply(self)
-    
+
     def leaky_relu(self, neg_slope=0.01):
-        pass
+        """
+        Apply the Leaky Rectified Linear Unit (Leaky ReLU) activation function.
+
+        Args:
+            neg_slope (float, optional): Negative slope coefficient. Default is 0.01.
+
+        Returns:
+            Tensor: Tensor with Leaky ReLU applied element-wise.
+
+        References:
+            Implementation adapted from:
+            https://github.com/tinygrad/tinygrad/blob/master/tinygrad/tensor.py
+        """
+        return self.relu() - (-neg_slope * self).relu()
 
     def tanh(self):
+        """
+        Apply the hyperbolic tangent (tanh) activation function.
+
+        Returns:
+            Tensor: Tensor with tanh applied element-wise.
+        """
         return F.Tanh.apply(self)
 
     def sigmoid(self):
+        """
+        Apply the sigmoid activation function.
+
+        Returns:
+            Tensor: Tensor with sigmoid applied element-wise.
+        """
         return F.Sigmoid.apply(self)
-    
+
     def softmax(self, axis=-1):
-        pass
+        """
+        Compute the softmax of the tensor along the specified axis.
+
+        The softmax function converts logits to probabilities.
+        Uses a stabilization trick by subtracting the maximum value for numerical stability.
+
+        Args:
+            axis (int, optional): Axis along which to compute the softmax. Default is -1.
+
+        Returns:
+            Tensor: Tensor containing the softmax probabilities.
+
+        References:
+            Implementation adapted from:
+            https://github.com/tinygrad/tinygrad/blob/master/tinygrad/tensor.py
+        """
+        max_tensor = self.max(axis=axis, keepdims=True)
+        m = self - max_tensor  # Stabilization
+        e = m.exp()
+        return e / e.sum(axis=axis, keepdims=True)
 
     def log_softmax(self, axis=-1):
-        pass
+        """
+        Compute the log-softmax of the tensor along the specified axis.
+
+        The log-softmax function is the logarithm of the softmax function.
+        Uses a stabilization trick by subtracting the maximum value for numerical stability.
+
+        Args:
+            axis (int, optional): Axis along which to compute the log-softmax. Default is -1.
+
+        Returns:
+            Tensor: Tensor containing the log-softmax values.
+
+        References:
+            Implementation adapted from:
+            https://github.com/tinygrad/tinygrad/blob/master/tinygrad/tensor.py
+        """
+        max_tensor = self.max(axis=axis, keepdims=True)
+        m = self - max_tensor  # Stabilization
+        e = m.exp()
+        s = e.sum(axis=axis, keepdims=True)
+        return m - s.log()
 
     def swish(self):
-        pass
+        """
+        Swish activation function.
+        Computes swish as x * sigmoid(x).
 
+        Returns:
+            Tensor: Tensor with swish applied element-wise.
+
+        References:
+            Implementation adapted from:
+            https://github.com/tinygrad/tinygrad/blob/master/tinygrad/tensor.py
+        """
+        return self * self.sigmoid()
+    
     def gelu(self):
-        pass
+        """
+        Gaussian Error Linear Unit (GELU) activation function.
+        Uses an enhanced polynomial approximation for higher accuracy within a tolerance of 0.0001.
+        Lower accuracy compared to pytorch but avoids integrals
+
+        Returns:
+            Tensor: Tensor with GELU applied element-wise.
+        """
+        sqrt_2_over_pi = 0.7978845608028654  # Precomputed constant for GELU approximation
+        cubic_coefficient = 0.044715  # Coefficient for the cubic term in GELU approximation
+        quartic_coefficient = 0.000654  # Coefficient for the quartic term for enhanced accuracy
+        
+        return 0.5 * self * (1 + (sqrt_2_over_pi * (self + cubic_coefficient * self**3 + quartic_coefficient * self**4)).tanh())
+
 
     # ----- standard -------
     def exp(self):
         return F.Exp.apply(self)
 
     def exp2(self):
-        pass
+        return F.Exp.apply(self * math.log(2))
 
     def log(self):
         return F.Log.apply(self)
 
     def log2(self):
-        pass
+        return self.log() / math.log(2)
 
     def sqrt(self):
-        pass
+        return F.Sqrt.apply(self)
 
     def rsqrt(self):
-        pass
+        return self.reciprocal().sqrt()
 
     def sin(self):
         return F.Sin.apply(self)
 
     def cos(self):
-        pass
+        return ((math.pi / 2) - self).sin()
 
     def tan(self):
-        pass
+        return self.sin() / self.cos()
 
     def square(self):
         return self * self
@@ -269,6 +390,10 @@ class Tensor:
 
     def reciprocal(self):
         return F.Reciprocal.apply(self)
+    
+    def clone(self):
+        return F.Copy.apply(self)
+
     # ----------
     # Binary Ops
     # ----------
@@ -319,7 +444,25 @@ class Tensor:
 
     def __pow__(self, other):
         return self.pow(other)
-    
+
+    def __rmul__(self, other):
+        return self * other
+
+    def __radd__(self, other):
+        return self + other
+
+    def __neg__(self):
+        return self * -1
+
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __rsub__(self, other):
+        return other + (-self)
+
+    def __rtruediv__(self, other):
+        return self / other
+
     # ----------
     # Ternary Ops
     # ----------
@@ -337,11 +480,17 @@ class Tensor:
     def mean(self, axis=None, keepdims=False):
         return F.Mean.apply(self, axis=axis, keepdims=keepdims)
 
-    def var(self):
-        pass
+    def var(self, axis=None, keepdims=False, unbiased=False):
+        """Returns the variance of the array elements along the specified axis."""
+        ddof = 1 if unbiased else 0
+        variance = np.var(self.data, axis=axis, keepdims=keepdims, ddof=ddof)
+        return self._create_tensor(variance, requires_grad=False)
 
-    def std(self):
-        pass
+    def std(self, axis=None, keepdims=False, unbiased=False):
+        """Returns the standard deviation of the array elements along the specified axis."""
+        ddof = 1 if unbiased else 0
+        std_dev = np.std(self.data, axis=axis, keepdims=keepdims, ddof=ddof)
+        return self._create_tensor(std_dev, requires_grad=False)
 
     def maximum(self, other):
         other = self._ensure_tensor(other)
@@ -357,37 +506,51 @@ class Tensor:
     def min(self, axis=None, keepdims=False):
         return F.Min.apply(self, axis=axis, keepdims=keepdims)
 
-    def clip(self):
-        pass
+    def clip(self, min_, max_):
+        return self.maximum(min_).minimum(max_)
 
     def flatten(self, start_dim, end_dim=-1):
-        pass
+        shape = self.shape
+        if end_dim == -1:
+            end_dim = len(shape) - 1
+        new_shape = shape[:start_dim] + (-1,) + shape[end_dim + 1:]
+        return self.reshape(*new_shape)
 
     # ------------
     # Movement Ops
     # ------------
-    
+
     def view(self, *shape):
         # alias for reshape
-        pass
+        return self.reshape(*shape)
 
     def reshape(self, *shape):
-            return F.Reshape.apply(self, shape)
+        return F.Reshape.apply(self, shape)
 
     def transpose(self, axes=None):
         return F.Transpose.apply(self, axes)
 
-    def pad(self, pad_width, contant_values=0):
-        pass
+    # def pad(self, pad_width, contant_values=0):
+    #     pass
 
-    def shrink(self, shrink_dims):
-        pass
+    # def shrink(self, shrink_dims):
+    #     pass
+
 
     def squeeze(self, axis=None):
-        pass
+        shape = list(self.shape)
+        if axis is None:
+            new_shape = [dim for dim in shape if dim != 1]
+        else:
+            if shape[axis] != 1:
+                raise ValueError("Cannot squeeze axis with size not equal to 1")
+            new_shape = shape[:axis] + shape[axis + 1:]
+        return self.reshape(*new_shape)
 
     def unsqueeze(self, axis):
-        pass
+        shape = list(self.shape)
+        new_shape = shape[:axis] + [1] + shape[axis:]
+        return self.reshape(*new_shape)
 
     def __getitem__(self, index):
         return F.Slice.apply(self, index)
@@ -418,24 +581,30 @@ class Tensor:
 
         self._op = result._op
         self.grad_fn = result.grad_fn
+
     # ----------
     # Utility Ops
     # ----------
-    def argmax(self, axis):
-        pass
+    def argmax(self, axis=None):
+        """Returns the indices of the maximum values along an axis."""
+        indices = np.argmax(self.data, axis=axis)
+        return self._create_tensor(indices, requires_grad=False, dtype=np.int64)
 
-    def argmin(self, axis):
-        pass
+    def argmin(self, axis=None):
+        """Returns the indices of the minimum values along an axis."""
+        indices = np.argmin(self.data, axis=axis)
+        return self._create_tensor(indices, requires_grad=False, dtype=np.int64)
+
 
     def __len__(self):
         return len(self.data)
-    
+
     # def __eq__(self, other):
     #     pass
 
     def __hash__(self):
         return id(self)
-    
+
     def __format__(self, format_spec):
         """Format the Tensor's data according to the format_spec."""
         if format_spec == "":
@@ -449,8 +618,6 @@ class Tensor:
                 },
             )
             return formatted_data
-
-
 
     def __repr__(self):
         info = f"tensor({self.data})"

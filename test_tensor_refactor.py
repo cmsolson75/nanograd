@@ -4,7 +4,7 @@ import numpy as np
 from tensor_refactor import Tensor
 
 EPSILON = 1e-6  # Tolerance for floating point comparison
-
+EPSILON_2 = 1e-3
 
 def assert_tensors_equal(tensor1, tensor2):
     np.testing.assert_allclose(
@@ -16,6 +16,19 @@ def assert_gradients_equal(tensor1, tensor2):
     np.testing.assert_allclose(
         tensor1.grad, tensor2.grad.detach().numpy(), rtol=EPSILON, atol=EPSILON
     )
+
+def assert_tensors_equal_aprox_error(tensor1, tensor2):
+    # for aprox functions(gelu) or unstable functions(tan)
+    np.testing.assert_allclose(
+        tensor1.data, tensor2.detach().numpy(), rtol=EPSILON_2, atol=EPSILON_2
+    )
+
+def assert_gradients_equal_aprox_error(tensor1, tensor2):
+    # for aprox functions(gelu) or unstable functions(tan)
+    np.testing.assert_allclose(
+        tensor1.grad, tensor2.grad.detach().numpy(), rtol=EPSILON_2, atol=EPSILON_2
+    )
+
 
 @pytest.mark.parametrize(
     "x, y",
@@ -683,7 +696,26 @@ def test_exp_backward(x):
         np.random.rand(3, 4) + 1,
         np.random.rand(5, 1) + 1,
         np.random.rand(1, 5) + 1,
-        np.random.rand(6, 6) + 1,
+        np.random.randn(6, 6),
+    ],
+)
+def test_log_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.log()
+    result_torch = x_torch.log()
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.rand(2, 3) + 1,
+        np.random.rand(3, 4) + 1,
+        np.random.rand(5, 1) + 1,
+        np.random.rand(1, 5) + 1,
+        np.random.randn(6, 6),
     ],
 )
 def test_log_backward(x):
@@ -695,6 +727,8 @@ def test_log_backward(x):
 
     result_nano.sum().backward()
     result_torch.sum().backward()
+    print("NANO GRAD: ", x_nano.grad)
+    print("TORCH GRAD:", x_torch.grad.detach().numpy())
 
     assert_gradients_equal(x_nano, x_torch)
 
@@ -1292,3 +1326,933 @@ def test_where_backward(condition, x, y):
 
     assert_gradients_equal(x_nano, x_torch)
     assert_gradients_equal(y_nano, y_torch)
+
+# Add the test for sqrt forward
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.rand(2, 3) + 1,  # Adding 1 to avoid sqrt of zero
+        np.random.rand(3, 4) + 1,
+        np.random.rand(5, 1) + 1,
+        np.random.rand(1, 5) + 1,
+        np.random.rand(6, 6) + 1,
+        np.random.randn(8, 2) # test for neg
+    ],
+)
+def test_sqrt_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.sqrt()
+    result_torch = torch.sqrt(x_torch)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.rand(2, 3) + 1,
+        np.random.rand(3, 4) + 1,
+        np.random.rand(5, 1) + 1,
+        np.random.rand(1, 5) + 1,
+        np.random.rand(6, 6) + 1,
+        np.random.randn(8, 2)
+    ],
+)
+def test_sqrt_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.sqrt()
+    result_torch = torch.sqrt(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+@pytest.mark.parametrize(
+    "x, neg_slope",
+    [
+        (np.random.randn(2, 3), 0.01),
+        (np.random.randn(3, 4), 0.02),
+        (np.random.randn(5, 1), 0.03),
+        (np.random.randn(1, 5), 0.04),
+        (np.random.randn(6, 6), 0.05),
+    ],
+)
+def test_leaky_relu_forward(x, neg_slope):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.leaky_relu(neg_slope=neg_slope)
+    result_torch = torch.nn.functional.leaky_relu(x_torch, negative_slope=neg_slope)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x, neg_slope",
+    [
+        (np.random.randn(2, 3), 0.01),
+        (np.random.randn(3, 4), 0.02),
+        (np.random.randn(5, 1), 0.03),
+        (np.random.randn(1, 5), 0.04),
+        (np.random.randn(6, 6), 0.05),
+    ],
+)
+def test_leaky_relu_backward(x, neg_slope):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.leaky_relu(neg_slope=neg_slope)
+    result_torch = torch.nn.functional.leaky_relu(x_torch, negative_slope=neg_slope)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(5, 1), 1),
+        (np.random.randn(1, 5), -1),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_softmax_forward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.softmax(axis=axis)
+    result_torch = torch.nn.functional.softmax(x_torch, dim=axis)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(5, 1), 1),
+        (np.random.randn(1, 5), -1),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_softmax_backward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.softmax(axis=axis)
+    result_torch = torch.nn.functional.softmax(x_torch, dim=axis)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for log_softmax
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(5, 1), 1),
+        (np.random.randn(1, 5), -1),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_log_softmax_forward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.log_softmax(axis=axis)
+    result_torch = torch.nn.functional.log_softmax(x_torch, dim=axis)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(5, 1), 1),
+        (np.random.randn(1, 5), -1),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_log_softmax_backward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.log_softmax(axis=axis)
+    result_torch = torch.nn.functional.log_softmax(x_torch, dim=axis)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for swish
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_swish_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.swish()
+    result_torch = x_torch * torch.sigmoid(x_torch)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_swish_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.swish()
+    result_torch = x_torch * torch.sigmoid(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for exp2
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_exp2_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.exp2()
+    result_torch = torch.pow(2, x_torch)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_exp2_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.exp2()
+    result_torch = torch.pow(2, x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for log2
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_log2_forward(x):
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = torch.log2(x_torch)
+    print(result_torch)
+
+    x_nano = Tensor(x, requires_grad=True)
+    result_nano = x_nano.log2()
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_log2_backward(x):
+    print("X:", x)
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True, dtype=torch.float32)
+
+    result_nano = x_nano.log2()
+    print("Nano results", result_nano)
+    result_torch = torch.log2(x_torch)
+    print("Torch results", result_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    print("NANO GRAD: ", x_nano.grad)
+    print("TORCH GRAD:", x_torch.grad.detach().numpy())
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for rsqrt
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.rand(2, 3) + 1,  # Adding 1 to avoid division by zero
+        np.random.rand(3, 4) + 1,
+        np.random.rand(5, 1) + 1,
+        np.random.rand(1, 5) + 1,
+        np.random.rand(6, 6) + 1,
+    ],
+)
+def test_rsqrt_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.rsqrt()
+    result_torch = torch.rsqrt(x_torch)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.rand(2, 3) + 1,
+        np.random.rand(3, 4) + 1,
+        np.random.rand(5, 1) + 1,
+        np.random.rand(1, 5) + 1,
+        np.random.rand(6, 6) + 1,
+    ],
+)
+def test_rsqrt_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.rsqrt()
+    result_torch = torch.rsqrt(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for cos
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_cos_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.cos()
+    result_torch = torch.cos(x_torch)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_cos_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.cos()
+    result_torch = torch.cos(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for tan
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_tan_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True, dtype=torch.float32)
+
+    result_nano = x_nano.tan()
+    result_torch = torch.tan(x_torch)
+
+    assert_tensors_equal_aprox_error(result_nano, result_torch)
+
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_tan_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.tan()
+    result_torch = torch.tan(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal_aprox_error(x_nano, x_torch)
+
+
+# Test for square
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_square_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.square()
+    result_torch = x_torch**2
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_square_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.square()
+    result_torch = x_torch**2
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for gelu
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_gelu_forward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.gelu()
+    result_torch = torch.nn.functional.gelu(x_torch)
+
+    assert_tensors_equal_aprox_error(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x",
+    [
+        np.random.randn(2, 3),
+        np.random.randn(3, 4),
+        np.random.randn(5, 1),
+        np.random.randn(1, 5),
+        np.random.randn(6, 6),
+    ],
+)
+def test_gelu_backward(x):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.gelu()
+    result_torch = torch.nn.functional.gelu(x_torch)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal_aprox_error(x_nano, x_torch)
+
+# Test for sub (as __sub__)
+@pytest.mark.parametrize(
+    "x, y",
+    [
+        (np.random.randn(2, 3), np.random.randn(2, 3)),
+        (np.random.randn(3, 4), np.random.randn(3, 4)),
+        (np.random.randn(8, 1), np.random.randn(8, 4)),
+        (np.random.randn(2, 3), np.random.randn(3)),
+        (np.random.randn(3), np.random.randn(3, 3)),
+    ],
+)
+def test_sub_forward(x, y):
+    t1 = Tensor(x, requires_grad=True)
+    t2 = Tensor(y, requires_grad=True)
+    result = t1 - t2
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    y_torch = torch.tensor(y, requires_grad=True)
+    result_torch = x_torch - y_torch
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, y",
+    [
+        (np.random.randn(2, 3), np.random.randn(2, 3)),
+        (np.random.randn(3, 4), np.random.randn(3, 4)),
+        (np.random.randn(8, 1), np.random.randn(8, 4)),
+        (np.random.randn(2, 3), np.random.randn(3)),
+        (np.random.randn(3), np.random.randn(3, 3)),
+    ],
+)
+def test_sub_backward(x, y):
+    x_nano = Tensor(x, requires_grad=True)
+    y_nano = Tensor(y, requires_grad=True)
+    result = x_nano - y_nano
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    y_torch = torch.tensor(y, requires_grad=True)
+    result_torch = x_torch - y_torch
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+    assert_gradients_equal(y_nano, y_torch)
+
+# Test for div (as __truediv__)
+@pytest.mark.parametrize(
+    "x, y",
+    [
+        (np.random.randn(2, 3), np.random.randn(2, 3) + 1),  # Adding 1 to avoid division by zero
+        (np.random.randn(3, 4), np.random.randn(3, 4) + 1),
+        (np.random.randn(8, 1), np.random.randn(8, 4) + 1),
+        (np.random.randn(2, 3), np.random.randn(3) + 1),
+        (np.random.randn(3), np.random.randn(3, 3) + 1),
+    ],
+)
+def test_div_forward(x, y):
+    t1 = Tensor(x, requires_grad=True)
+    t2 = Tensor(y, requires_grad=True)
+    result = t1 / t2
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    y_torch = torch.tensor(y, requires_grad=True)
+    result_torch = x_torch / y_torch
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, y",
+    [
+        (np.random.randn(2, 3), np.random.randn(2, 3) + 1),
+        (np.random.randn(3, 4), np.random.randn(3, 4) + 1),
+        (np.random.randn(8, 1), np.random.randn(8, 4) + 1),
+        (np.random.randn(2, 3), np.random.randn(3) + 1),
+        (np.random.randn(3), np.random.randn(3, 3) + 1),
+    ],
+)
+def test_div_backward(x, y):
+    x_nano = Tensor(x, requires_grad=True)
+    y_nano = Tensor(y, requires_grad=True)
+    result = x_nano / y_nano
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    y_torch = torch.tensor(y, requires_grad=True)
+    result_torch = x_torch / y_torch
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+    assert_gradients_equal(y_nano, y_torch)
+
+# Test for pow (as __pow__)
+@pytest.mark.parametrize(
+    "x, exponent",
+    [
+        (np.random.randn(2, 3), 2),
+        (np.random.randn(3, 4), 3),
+        (np.random.randn(8, 1), 0.5),
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3), 4),
+    ],
+)
+def test_pow_forward(x, exponent):
+    t = Tensor(x, requires_grad=True)
+    result = t ** exponent
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch ** exponent
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, exponent",
+    [
+        (np.random.randn(2, 3), 2),
+        (np.random.randn(3, 4), 3),
+        (np.random.randn(8, 1), 0.5),
+        (np.random.randn(2, 3), -1),
+        (np.random.randn(3), 4),
+    ],
+)
+def test_pow_backward(x, exponent):
+    x_nano = Tensor(x, requires_grad=True)
+    result = x_nano ** exponent
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch ** exponent
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for clip
+@pytest.mark.parametrize(
+    "x, min_, max_",
+    [
+        (np.random.randn(2, 3), -0.5, 0.5),
+        (np.random.randn(3, 4), -1.0, 1.0),
+        (np.random.randn(5, 1), -0.1, 0.1),
+        (np.random.randn(1, 5), 0, 1),
+        (np.random.randn(6, 6), -2, 2),
+    ],
+)
+def test_clip_forward(x, min_, max_):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.clip(min_, max_)
+    result_torch = x_torch.clamp(min=min_, max=max_)
+
+    assert_tensors_equal(result_nano, result_torch)
+
+@pytest.mark.parametrize(
+    "x, min_, max_",
+    [
+        (np.random.randn(2, 3), -0.5, 0.5),
+        (np.random.randn(3, 4), -1.0, 1.0),
+        (np.random.randn(5, 1), -0.1, 0.1),
+        (np.random.randn(1, 5), 0, 1),
+        (np.random.randn(6, 6), -2, 2),
+    ],
+)
+def test_clip_backward(x, min_, max_):
+    x_nano = Tensor(x, requires_grad=True)
+    x_torch = torch.tensor(x, requires_grad=True)
+
+    result_nano = x_nano.clip(min_, max_)
+    result_torch = x_torch.clamp(min=min_, max=max_)
+
+    result_nano.sum().backward()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for view (alias for reshape)
+@pytest.mark.parametrize(
+    "x, shape",
+    [
+        (np.random.randn(2, 3), (3, 2)),
+        (np.random.randn(3, 4), (4, 3)),
+        (np.random.randn(8, 1), (4, 2)),
+        (np.random.randn(2, 3), (6, )),
+        (np.random.randn(3), (1, 3)),
+    ],
+)
+def test_view_forward(x, shape):
+    t1 = Tensor(x, requires_grad=True)
+    result = t1.view(*shape)
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch.view(*shape)
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, shape",
+    [
+        (np.random.randn(2, 3), (3, 2)),
+        (np.random.randn(3, 4), (4, 3)),
+        (np.random.randn(8, 1), (4, 2)),
+        (np.random.randn(2, 3), (6, )),
+        (np.random.randn(3), (1, 3)),
+    ],
+)
+def test_view_backward(x, shape):
+    x_nano = Tensor(x, requires_grad=True)
+    result = x_nano.view(*shape)
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch.view(*shape)
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for squeeze
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(1, 3), None),
+        (np.random.randn(3, 1), 1),
+        (np.random.randn(1, 4, 1), None),
+        (np.random.randn(2, 1, 3), 1),
+    ],
+)
+def test_squeeze_forward(x, axis):
+    t1 = Tensor(x, requires_grad=True)
+    result = t1.squeeze(axis)
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    if axis is not None:
+        result_torch = x_torch.squeeze(dim=axis)
+    else:
+        result_torch = x_torch.squeeze()
+    assert_tensors_equal(result, result_torch)
+
+# Test for squeeze
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(1, 3), None),
+        (np.random.randn(3, 1), 1),
+        (np.random.randn(1, 4, 1), None),
+        (np.random.randn(2, 1, 3), 1),
+    ],
+)
+def test_squeeze_backward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    result = x_nano.squeeze(axis)
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    if axis is not None:
+        result_torch = x_torch.squeeze(dim=axis)
+    else:
+        result_torch = x_torch.squeeze()
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for unsqueeze
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(3), 0),
+        (np.random.randn(3, 4), 1),
+        (np.random.randn(5, 1), 2),
+        (np.random.randn(1, 5), 0),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_unsqueeze_forward(x, axis):
+    t1 = Tensor(x, requires_grad=True)
+    result = t1.unsqueeze(axis)
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch.unsqueeze(dim=axis)
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(3), 0),
+        (np.random.randn(3, 4), 1),
+        (np.random.randn(5, 1), 2),
+        (np.random.randn(1, 5), 0),
+        (np.random.randn(6, 6), 1),
+    ],
+)
+def test_unsqueeze_backward(x, axis):
+    x_nano = Tensor(x, requires_grad=True)
+    result = x_nano.unsqueeze(axis)
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = x_torch.unsqueeze(dim=axis)
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+# Test for flatten
+@pytest.mark.parametrize(
+    "x, start_dim, end_dim",
+    [
+        (np.random.randn(2, 3, 4), 1, -1),
+        (np.random.randn(3, 4, 5), 0, 1),
+        (np.random.randn(5, 1), 0, -1),
+        (np.random.randn(1, 5, 6), 1, 2),
+        (np.random.randn(6, 6), 0, 1),
+    ],
+)
+def test_flatten_forward(x, start_dim, end_dim):
+    t1 = Tensor(x, requires_grad=True)
+    result = t1.flatten(start_dim, end_dim)
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = torch.flatten(x_torch, start_dim=start_dim, end_dim=end_dim)
+    assert_tensors_equal(result, result_torch)
+
+@pytest.mark.parametrize(
+    "x, start_dim, end_dim",
+    [
+        (np.random.randn(2, 3, 4), 1, -1),
+        (np.random.randn(3, 4, 5), 0, 1),
+        (np.random.randn(5, 1), 0, -1),
+        (np.random.randn(1, 5, 6), 1, 2),
+        (np.random.randn(6, 6), 0, 1),
+    ],
+)
+def test_flatten_backward(x, start_dim, end_dim):
+    x_nano = Tensor(x, requires_grad=True)
+    result = x_nano.flatten(start_dim, end_dim)
+    result.sum().backward()
+
+    x_torch = torch.tensor(x, requires_grad=True)
+    result_torch = torch.flatten(x_torch, start_dim=start_dim, end_dim=end_dim)
+    result_torch.sum().backward()
+
+    assert_gradients_equal(x_nano, x_torch)
+
+
+# Test for argmax
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(3, 4), None),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(3, 4), 1),
+        (np.random.randn(2, 3, 4), 2),
+    ],
+)
+def test_argmax(x, axis):
+    t = Tensor(x)
+    result = t.argmax(axis=axis)
+
+    x_torch = torch.tensor(x)
+    result_torch = x_torch.argmax(dim=axis)
+    assert_tensors_equal(result, result_torch)
+
+# Test for argmin
+@pytest.mark.parametrize(
+    "x, axis",
+    [
+        (np.random.randn(3, 4), None),
+        (np.random.randn(3, 4), 0),
+        (np.random.randn(3, 4), 1),
+        (np.random.randn(2, 3, 4), 2),
+    ],
+)
+def test_argmin(x, axis):
+    t = Tensor(x)
+    result = t.argmin(axis=axis)
+
+    x_torch = torch.tensor(x)
+    result_torch = x_torch.argmin(dim=axis)
+    assert_tensors_equal(result, result_torch)
+
+# Test for var
+@pytest.mark.parametrize(
+    "x, axis, keepdims",
+    [
+        (np.random.randn(3, 4).astype(np.float32), None, False),
+        (np.random.randn(3, 4).astype(np.float32), 0, False),
+        (np.random.randn(3, 4).astype(np.float32), 1, True),
+        (np.random.randn(2, 3, 4).astype(np.float32), 2, True),
+    ],
+)
+def test_var(x, axis, keepdims):
+    t = Tensor(x)
+    result = t.var(axis=axis, keepdims=keepdims, unbiased=False)
+
+    x_torch = torch.tensor(x, dtype=torch.float32)
+    result_torch = x_torch.var(dim=axis, keepdim=keepdims, unbiased=False)
+    assert_tensors_equal(result, result_torch)
+
+# Test for std
+@pytest.mark.parametrize(
+    "x, axis, keepdims",
+    [
+        (np.random.randn(3, 4).astype(np.float32), None, False),
+        (np.random.randn(3, 4).astype(np.float32), 0, False),
+        (np.random.randn(3, 4).astype(np.float32), 1, True),
+        (np.random.randn(2, 3, 4).astype(np.float32), 2, True),
+    ],
+)
+def test_std(x, axis, keepdims):
+    t = Tensor(x)
+    result = t.std(axis=axis, keepdims=keepdims, unbiased=False)
+
+    x_torch = torch.tensor(x, dtype=torch.float32)
+    result_torch = x_torch.std(dim=axis, keepdim=keepdims, unbiased=False)
+    assert_tensors_equal(result, result_torch)
