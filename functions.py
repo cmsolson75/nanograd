@@ -1,4 +1,4 @@
-from tensor_refactor import Function
+from tensor import Function
 import numpy as np
 
 # Need to add typing
@@ -626,3 +626,22 @@ class Where(Function):
                 grad_y = broadcast_gradient(grad_y, y.data.shape)
 
         return grad_x, grad_y
+
+
+# ----------
+# Functional NN Ops
+# ----------
+
+class Linear(Function):
+    @staticmethod
+    def forward(ctx, x, weight, bias):
+        ctx.save_for_backward(x, weight, bias)
+        return x.data @ weight.data + bias.data
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x, weight, bias = ctx.saved_tensors
+        grad_x = grad_output @ weight.data.T if x.requires_grad else None
+        grad_weight = x.data.T @ grad_output if weight.requires_grad else None
+        grad_bias = grad_output.sum(axis=0, keepdims=True) if bias.requires_grad else None
+        return grad_x, grad_weight, grad_bias

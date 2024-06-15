@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Iterable, Generator, Optional, Tuple, List
 from tensor import Tensor
+import functions as F
 import math
 
 
@@ -64,7 +65,7 @@ class Linear(Module):
             out_dims (int): Number of output dimensions.
         """
         self.weight = Tensor.kaiming_uniform(
-            in_dims, out_dims, gain=math.sqrt(5), requires_grad=True
+            (in_dims, out_dims), gain=math.sqrt(5), requires_grad=True
         )
         self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
 
@@ -78,7 +79,8 @@ class Linear(Module):
         Returns:
             Tensor: Output tensor.
         """
-        return x @ self.weight + self.bias
+        # return x @ self.weight + self.bias
+        return x.linear(self.weight, self.bias)
 
     def __repr__(self) -> str:
         return f"Linear({self.weight.shape})"
@@ -521,7 +523,8 @@ class ReLU(Module):
 
 
 class LeakyReLU(Module):
-    pass
+    def forward(self, x):
+        return x.leaky_relu()
 
 
 class Tanh(Module):

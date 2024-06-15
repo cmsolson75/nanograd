@@ -41,18 +41,21 @@ def zeros(shape):
 
 def ones(shape):
     return np.ones(shape)
+# refactor: this is wrong
 
-def eye(shape):
-    return np.eye(shape[0], shape[1])
+# Match torch api for this
+def eye(N, M=None, k=0):
+    M = N if M is None else M
+    return np.eye(N, M, k)
 
 def uniform(shape, a=0.0, b=1.0):
     tensor = np.empty(shape)
     tensor[:] = np.random.uniform(a, b, size=tensor.shape)
     return tensor
 
-def normal(shape, mean=0.0, std=1.0):
-    tensor = np.empty(shape)
-    tensor[:] = np.random.normal(mean, std, size=tensor.shape)
+# this is my old interface: make all have this interface from old
+def normal(loc, scale=1.0, size=None):
+    tensor = np.random.normal(loc=loc, scale=scale, size=size)
     return tensor
 
 def arange(start, stop=None, step=1, dtype=None):
