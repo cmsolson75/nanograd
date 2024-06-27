@@ -159,28 +159,35 @@ class Log(Function):
     @staticmethod
     def forward(ctx, a):
         ctx.save_for_backward(a)
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             result = np.log(a.data)
-            result = np.where(a.data > 0, result, np.nan)  # Setting invalid results to NaN
+            result = np.where(
+                a.data > 0, result, np.nan
+            )  # Setting invalid results to NaN
         return result
 
     @staticmethod
     def backward(ctx, grad_output):
         (a,) = ctx.saved_tensors
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             grad_input = np.zeros_like(a.data)
             positive_mask = a.data > 0
             zero_or_negative_mask = a.data <= 0
 
             # For positive values, the gradient is 1/x
-            grad_input[positive_mask] = grad_output[positive_mask] / a.data[positive_mask]
+            grad_input[positive_mask] = (
+                grad_output[positive_mask] / a.data[positive_mask]
+            )
             # Handle zero or negative values:
             # Instead of setting gradient to `inf` or `nan`, propagate the gradient output scaled by a large negative value.
             # This mimics the behavior observed in PyTorch, ensuring proper gradient propagation.
-            epsilon = 1e-15 # for avoiding -1/0
-            grad_input[zero_or_negative_mask] = grad_output[zero_or_negative_mask] * (-1.0 / np.abs(a.data[zero_or_negative_mask] + epsilon))
+            epsilon = 1e-15  # for avoiding -1/0
+            grad_input[zero_or_negative_mask] = grad_output[zero_or_negative_mask] * (
+                -1.0 / np.abs(a.data[zero_or_negative_mask] + epsilon)
+            )
 
         return grad_input
+
 
 class Sqrt(Function):
     @staticmethod
@@ -197,9 +204,9 @@ class Sqrt(Function):
         grad_a = None
         if a.requires_grad:
             with np.errstate(invalid="ignore"):
-                grad_a = (0.5 / np.sqrt(a.data))
+                grad_a = 0.5 / np.sqrt(a.data)
                 grad_a = np.where(np.isnan(grad_a), np.nan, grad_a)
-                grad_a = grad_a * grad_output # chain rule
+                grad_a = grad_a * grad_output  # chain rule
             grad_a = np.broadcast_to(grad_a, a.shape)
         return grad_a
 
@@ -215,7 +222,8 @@ class Sin(Function):
         (a,) = ctx.saved_tensors
         grad_a = np.cos(a.data) * grad_output if a.requires_grad else None
         return grad_a
-    
+
+
 class Abs(Function):
     @staticmethod
     def forward(ctx, a):
@@ -632,6 +640,7 @@ class Where(Function):
 # Functional NN Ops
 # ----------
 
+
 class Linear(Function):
     @staticmethod
     def forward(ctx, x, weight, bias):
@@ -643,5 +652,7 @@ class Linear(Function):
         x, weight, bias = ctx.saved_tensors
         grad_x = grad_output @ weight.data.T if x.requires_grad else None
         grad_weight = x.data.T @ grad_output if weight.requires_grad else None
-        grad_bias = grad_output.sum(axis=0, keepdims=True) if bias.requires_grad else None
+        grad_bias = (
+            grad_output.sum(axis=0, keepdims=True) if bias.requires_grad else None
+        )
         return grad_x, grad_weight, grad_bias

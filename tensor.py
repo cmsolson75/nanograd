@@ -46,6 +46,8 @@ class Context:
         self.saved_attributes[name] = value
 
 
+# Need to add in stack and cat
+
 class Tensor:
     def __init__(self, data, requires_grad=False, dtype=np.float32):
         self.data = (data if isinstance(data, np.ndarray) else np.array(data)).astype(
@@ -73,16 +75,28 @@ class Tensor:
     def numpy(self):
         return self.data
 
-    @property
-    def size(self):
-        return self.data.size
 
     @property
     def T(self):
         return self.transpose()
+    
+    def size(self, axis=None):
+        if axis is None:
+            return self.shape
+        else:
+            if axis >= self.dim() or axis < -self.dim():
+                raise IndexError(f"{axis} out of range")
+            return self.shape[axis]
+    
+    def dim(self):
+        return len(self.data)
 
     def item(self):
         return self.data.item()
+    
+    # some kind of type op could be good
+    def type(self, dtype):
+        self.data.type(dtype)
 
     # Backward methods
     def backward(self, grad_output=None):
@@ -126,7 +140,7 @@ class Tensor:
                             parent.grad = np.zeros_like(parent.data)
                         parent.grad += grad
 
-    #
+    # checks
     @staticmethod
     def _create_tensor(data, requires_grad=False, dtype=np.float32):
         return Tensor(data, requires_grad=requires_grad, dtype=dtype)
@@ -143,8 +157,17 @@ class Tensor:
     # Creational Ops
     # ----------
     @classmethod
-    def kaiming_uniform(cls, shape, gain=math.sqrt(5), mode='fan_in', requires_grad=False, dtype=np.float32):
-        data = init.kaiming_uniform(shape, gain=gain, mode=mode)
+    def kaiming_uniform(cls, shape, a=math.sqrt(5), mode='fan_in', nonlinearity="leaky_relu", requires_grad=False, dtype=np.float32):
+        data = init.kaiming_uniform(shape, a=a, mode=mode, nonlinearity=nonlinearity)
+        return cls(data, requires_grad=requires_grad, dtype=dtype)
+    
+    @classmethod
+    def intercept_uniform(cls, shape, weight, requires_grad=False, dtype=np.float32):
+        """
+        Used for initializing bias in linear ops to mimic pytorch API
+        
+        """
+        data = init.intercept_uniform(shape, weight=weight)
         return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
@@ -221,6 +244,14 @@ class Tensor:
     def randint(cls, low, high=None, size=None, requires_grad=False, dtype=np.int32):
         data = init.randint(low, high, size)
         return cls(data, requires_grad=requires_grad)
+    
+    @staticmethod
+    def stack(tensors, axis=0, dtype=np.float32):
+        if not tensors:
+            raise ValueError("Tensors list is empty")
+        data_list = [tensor.data for tensor in tensors]
+        stacked_data = np.stack(data_list, axis=axis)
+        return Tensor._create_tensor(stacked_data, requires_grad=False, dtype=dtype)
 
     # ----------
     # Unnary Ops

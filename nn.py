@@ -54,9 +54,8 @@ class Linear(Module):
     """
     Linear layer (fully connected layer).
     """
-    # posibly implement a linear function to use speedups
 
-    def __init__(self, in_dims: int, out_dims: int) -> None:
+    def __init__(self, in_dims: int, out_dims: int, bias: bool = True) -> None:
         """
         Initializes the linear layer with the given dimensions.
 
@@ -65,9 +64,17 @@ class Linear(Module):
             out_dims (int): Number of output dimensions.
         """
         self.weight = Tensor.kaiming_uniform(
-            (in_dims, out_dims), gain=math.sqrt(5), requires_grad=True
+            (in_dims, out_dims),
+            a=math.sqrt(5),
+            mode="fan_in",
+            nonlinearity="leaky_relu",
+            requires_grad=True,
         )
-        self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
+        self.bias = Tensor.intercept_uniform(
+            (1, out_dims), self.weight.data, requires_grad=True
+        )
+        # if bias:
+        #     self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -79,7 +86,6 @@ class Linear(Module):
         Returns:
             Tensor: Output tensor.
         """
-        # return x @ self.weight + self.bias
         return x.linear(self.weight, self.bias)
 
     def __repr__(self) -> str:
@@ -220,24 +226,280 @@ class SGD(Optimizer):
 
                 param.data -= self.learning_rate * grad
 
-class ADAGrad(Optimizer):
-    pass
+
+class Adagrad(Optimizer):
+    """
+    Adagrad Optimizer
+
+    References:
+        Pytorch Implementation Logic: https://pytorch.org/docs/stable/generated/torch.optim.SGD.html
+        Paper: https://jmlr.org/papers/v12/duchi11a.html
+    """
+    def __init__(
+        self,
+        parameters: Iterable[Tensor],
+        lr: float,
+        weight_decay: float = 0,
+        epsilon: float = 1e-8,
+        initial_accumulator_value: float = 0,
+    ):
+        """
+        Initializes the Adagrad optimizer.
+
+        Args:
+            parameters (iterable): Iterable of parameters to optimize.
+            lr (float): Learning rate.
+            weight_decay (float): Weight decay (L2 penalty). Default is 0.
+            epsilon (float): Small constant to avoid division by zero. Default is 1e-8.
+            initial_accumulator_value (float): Initial value for the accumulator. Default is 0.
+        """
+        super().__init__(parameters, lr, weight_decay)
+        self.epsilon = epsilon
+        self.state_sum = [
+            np.full_like(param.data, initial_accumulator_value)
+            for param in self.parameters
+            if param.requires_grad
+        ]
+
+    def step(self) -> None:
+        """
+        Performs a single optimization step.
+        """
+        for idx, param in enumerate(self.parameters):
+            if param.grad is not None:
+                grad = param.grad
+                if self.weight_decay != 0:
+                    grad += self.weight_decay * param.data
+
+                self.state_sum[idx] += grad**2
+                param.data -= (
+                    self.learning_rate / (np.sqrt(self.state_sum[idx]) + self.epsilon)
+                ) * grad
 
 
-class ADADelta(Optimizer):
-    pass
+class Adadelta(Optimizer):
+    """
+    Adadelta optimizer
+    References:
+        Pytorch Implementation Logic: https://pytorch.org/docs/stable/generated/torch.optim.Adadelta.html#torch.optim.Adadelta
+        Paper: https://arxiv.org/abs/1212.5701
+    """
+    def __init__(
+        self,
+        parameters: Iterable[Tensor],
+        lr: float = 1.0,
+        rho: float = 0.9,
+        weight_decay: float = 0,
+        epsilon: float = 1e-6,
+    ):
+        """
+        Initializes the Adadelta optimizer.
+
+        Args:
+            parameters (iterable): Iterable of parameters to optimize.
+            lr (float): Learning rate (initial value, typically kept as 1.0). Default is 1.0.
+            rho (float): Decay rate for the moving average of squared gradients. Default is 0.9.
+            weight_decay (float): Weight decay (L2 penalty). Default is 0.
+            epsilon (float): Small constant to avoid division by zero. Default is 1e-6.
+        """
+        super().__init__(parameters, lr, weight_decay)
+        self.rho = rho
+        self.epsilon = epsilon
+        self.squared_avg = [
+            np.zeros_like(param.data) for param in self.parameters if param.requires_grad
+        ]
+        self.accumulate_updates = [
+            np.zeros_like(param.data) for param in self.parameters if param.requires_grad
+        ]
+
+    def step(self) -> None:
+        """
+        Performs a single optimization step.
+        """
+        for idx, param in enumerate(self.parameters):
+            if param.grad is not None:
+                grad = param.grad
+                if self.weight_decay != 0:
+                    grad += self.weight_decay * param.data
+
+                # Accumulate gradient
+                self.squared_avg[idx] = self.rho * self.squared_avg[idx] + (1 - self.rho) * grad ** 2
+
+                # Compute update
+                update = (np.sqrt(self.accumulate_updates[idx] + self.epsilon) / 
+                          np.sqrt(self.squared_avg[idx] + self.epsilon)) * grad
+
+                # Apply update
+                param.data -= self.lr * update
+
+                # Accumulate updates
+                self.accumulate_updates[idx] = self.rho * self.accumulate_updates[idx] + (1 - self.rho) * update ** 2
 
 
 class RMSProp(Optimizer):
-    pass
+    """
+    Root Mean Squared Propagation Optimizer
+
+    References:
+        Pytorch Logic: https://pytorch.org/docs/stable/generated/torch.optim.RMSprop.html#torch.optim.RMSprop
+        Hinton Lecture Slides: 
+    """
+    def __init__(
+        self,
+        parameters: Iterable[Tensor],
+        lr: float = 0.01,
+        alpha: float = 0.99,
+        weight_decay: float = 0,
+        momentum: float = 0,
+        epsilon: float = 1e-8,
+        centered: bool = False,
+    ):
+        """
+        Initializes the RMSProp optimizer.
+
+        Args:
+            parameters (iterable): Iterable of parameters to optimize.
+            lr (float): Learning rate. Default is 0.01.
+            alpha (float): Smoothing constant. Default is 0.99.
+            weight_decay (float): Weight decay (L2 penalty). Default is 0.
+            momentum (float): Momentum factor. Default is 0.
+            epsilon (float): Small constant to avoid division by zero. Default is 1e-8.
+            centered (bool): If True, compute the centered RMSProp. Default is False.
+        """
+        super().__init__(parameters, lr, weight_decay)
+        self.alpha = alpha
+        self.momentum = momentum
+        self.epsilon = epsilon
+        self.centered = centered
+
+        self.square_avg = [
+            np.zeros_like(param.data) for param in self.parameters if param.requires_grad
+        ]
+        if self.momentum > 0:
+            self.buffer = [
+                np.zeros_like(param.data) for param in self.parameters if param.requires_grad
+            ]
+        if self.centered:
+            self.grad_avg = [
+                np.zeros_like(param.data) for param in self.parameters if param.requires_grad
+            ]
+
+    def step(self) -> None:
+        """
+        Performs a single optimization step.
+        """
+        for idx, param in enumerate(self.parameters):
+            if param.grad is not None:
+                grad = param.grad
+
+                if self.weight_decay != 0:
+                    grad += self.weight_decay * param.data
+
+                self.square_avg[idx] = self.alpha * self.square_avg[idx] + (1 - self.alpha) * grad ** 2
+
+                if self.centered:
+                    self.grad_avg[idx] = self.alpha * self.grad_avg[idx] + (1 - self.alpha) * grad
+                    avg = self.square_avg[idx] - self.grad_avg[idx] ** 2
+                else:
+                    avg = self.square_avg[idx]
+
+                if self.momentum > 0:
+                    self.buffer[idx] = self.momentum * self.buffer[idx] + grad / (np.sqrt(avg) + self.epsilon)
+                    param.data -= self.lr * self.buffer[idx]
+                else:
+                    param.data -= self.lr * grad / (np.sqrt(avg) + self.epsilon)
+
 
 
 class Adam(Optimizer):
-    pass
+    def __init__(
+        self,
+        parameters: Iterable[Tensor],
+        lr: float = 0.001,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        weight_decay: float = 0,
+        epsilon: float = 1e-8,
+    ):
+        """
+        Initializes the Adam optimizer.
+
+        Args:
+            parameters (iterable): Iterable of parameters to optimize.
+            lr (float): Learning rate. Default is 0.001.
+            betas (tuple): Coefficients used for computing running averages of gradient and its square. Default is (0.9, 0.999).
+            weight_decay (float): Weight decay (L2 penalty). Default is 0.
+            epsilon (float): Small constant to avoid division by zero. Default is 1e-8.
+        """
+        super().__init__(parameters, lr, weight_decay)
+        self.beta1, self.beta2 = betas
+        self.epsilon = epsilon
+        self.m = [np.zeros_like(param.data) for param in self.parameters if param.requires_grad]
+        self.v = [np.zeros_like(param.data) for param in self.parameters if param.requires_grad]
+        self.t = 0
+
+    def step(self) -> None:
+        """
+        Performs a single optimization step.
+        """
+        self.t += 1
+        for idx, param in enumerate(self.parameters):
+            if param.grad is not None:
+                grad = param.grad
+                if self.weight_decay != 0:
+                    grad += self.weight_decay * param.data
+
+                self.m[idx] = self.beta1 * self.m[idx] + (1 - self.beta1) * grad
+                self.v[idx] = self.beta2 * self.v[idx] + (1 - self.beta2) * grad ** 2
+
+                m_hat = self.m[idx] / (1 - self.beta1 ** self.t)
+                v_hat = self.v[idx] / (1 - self.beta2 ** self.t)
+
+                param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
 
 
-class AdamW(Adam):  # Probably extends the adam class
-    pass
+
+class AdamW(Adam):
+    def __init__(
+        self,
+        parameters: Iterable[Tensor],
+        lr: float = 0.001,
+        betas: Tuple[float, float] = (0.9, 0.999),
+        weight_decay: float = 0.01,
+        epsilon: float = 1e-8,
+    ):
+        """
+        Initializes the AdamW optimizer.
+
+        Args:
+            parameters (iterable): Iterable of parameters to optimize.
+            lr (float): Learning rate. Default is 0.001.
+            betas (tuple): Coefficients used for computing running averages of gradient and its square. Default is (0.9, 0.999).
+            weight_decay (float): Weight decay. Default is 0.01.
+            epsilon (float): Small constant to avoid division by zero. Default is 1e-8.
+        """
+        super().__init__(parameters, lr, betas, weight_decay, epsilon)
+
+    def step(self) -> None:
+        """
+        Performs a single optimization step.
+        """
+        self.t += 1
+        for idx, param in enumerate(self.parameters):
+            if param.grad is not None:
+                grad = param.grad
+
+                self.m[idx] = self.beta1 * self.m[idx] + (1 - self.beta1) * grad
+                self.v[idx] = self.beta2 * self.v[idx] + (1 - self.beta2) * grad ** 2
+
+                m_hat = self.m[idx] / (1 - self.beta1 ** self.t)
+                v_hat = self.v[idx] / (1 - self.beta2 ** self.t)
+
+                param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
+
+                # Apply weight decay separately
+                if self.weight_decay != 0:
+                    param.data -= self.lr * self.weight_decay * param.data
+
 
 
 # -----------------------------------------
@@ -285,10 +547,22 @@ class DataLoader:
         start_index = self.current_index
         end_index = min(self.current_index + self.batch_size, len(self.indices))
         batch_indices = self.indices[start_index:end_index]
-        batch = [self.dataset[i] for i in batch_indices]
+
+        print(f"Indices: {batch_indices}")  # Debug print
+
+        data_batch = Tensor.zeros((len(batch_indices), *self.dataset.dataset.shape[1:]))
+        label_batch = Tensor.zeros((len(batch_indices),), dtype=np.int32)
+
+        for i, idx in enumerate(batch_indices):
+            data, label = self.dataset[idx]
+            data_batch[i] = data
+            label_batch[i] = label
+
+        print(f"Data Batch: {data_batch}")  # Debug print
+        print(f"Label Batch: {label_batch}")  # Debug print
 
         self.current_index = end_index
-        return batch
+        return data_batch, label_batch
 
     def __len__(self):
         return math.ceil(len(self.dataset) / self.batch_size)
