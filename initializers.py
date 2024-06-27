@@ -64,6 +64,7 @@ def calculate_gain(nonlinearity, param=None):
     References:
         Implementation adapted from:
         https://github.com/pytorch/pytorch/blob/main/torch/nn/init.py
+        Copy pasta
     """
     linear_fns = [
         "linear",
@@ -151,7 +152,6 @@ def zeros(shape):
 
 def ones(shape):
     return np.ones(shape)
-# refactor: this is wrong
 
 # Match torch api for this
 def eye(N, M=None, k=0):

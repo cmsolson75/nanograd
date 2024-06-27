@@ -63,6 +63,7 @@ class Linear(Module):
             in_dims (int): Number of input dimensions.
             out_dims (int): Number of output dimensions.
         """
+        super().__init__()
         self.weight = Tensor.kaiming_uniform(
             (in_dims, out_dims),
             a=math.sqrt(5),
@@ -93,8 +94,42 @@ class Linear(Module):
 
 
 class Sequential(Module):
-    # Container class for Modules
-    pass
+    def __init__(self, *args: Module) -> None:
+        """
+        Initializes the Sequential container with a sequence of modules.
+
+        Args:
+            *args (Module): Modules to be added in sequence.
+        """
+        super().__init__()
+        self.modules = args
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Passes the input tensor through each module in sequence.
+
+        Args:
+            x (Tensor): Input tensor.
+
+        Returns:
+            Tensor: Output tensor after passing through all modules.
+        """
+        for module in self.modules:
+            x = module(x)
+        return x
+
+    def parameters(self) -> Generator[Tensor, None, None]:
+        """
+        Returns an iterator over module parameters.
+
+        Yields
+        ------
+        Tensor
+            A parameter tensor of the module.
+        """
+        for module in self.modules:
+            yield from module.parameters()
+
 
 
 class Conv1d(Module):
@@ -342,7 +377,7 @@ class RMSProp(Optimizer):
 
     References:
         Pytorch Logic: https://pytorch.org/docs/stable/generated/torch.optim.RMSprop.html#torch.optim.RMSprop
-        Hinton Lecture Slides: 
+        Hinton Lecture Slides: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
     """
     def __init__(
         self,
@@ -500,72 +535,6 @@ class AdamW(Adam):
                 if self.weight_decay != 0:
                     param.data -= self.lr * self.weight_decay * param.data
 
-
-
-# -----------------------------------------
-
-
-class Dataset:
-    def __len__(self):
-        raise NotImplementedError
-
-    def __getitem__(self, index):
-        raise NotImplementedError
-
-
-class MNIST(Dataset):
-    pass
-
-
-class Cifar10(Dataset):
-    pass
-
-
-# ------------------------------------------
-
-
-class DataLoader:
-    def __init__(self, dataset, batch_size=1, shuffle=False):
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.indices = np.arange(len(dataset))
-        self.current_index = 0
-        if self.shuffle:
-            np.random.shuffle(self.indices)
-
-    def __iter__(self):
-        self.current_index = 0
-        if self.shuffle:
-            np.random.shuffle(self.indices)
-        return self
-
-    def __next__(self):
-        if self.current_index >= len(self.indices):
-            raise StopIteration
-
-        start_index = self.current_index
-        end_index = min(self.current_index + self.batch_size, len(self.indices))
-        batch_indices = self.indices[start_index:end_index]
-
-        print(f"Indices: {batch_indices}")  # Debug print
-
-        data_batch = Tensor.zeros((len(batch_indices), *self.dataset.dataset.shape[1:]))
-        label_batch = Tensor.zeros((len(batch_indices),), dtype=np.int32)
-
-        for i, idx in enumerate(batch_indices):
-            data, label = self.dataset[idx]
-            data_batch[i] = data
-            label_batch[i] = label
-
-        print(f"Data Batch: {data_batch}")  # Debug print
-        print(f"Label Batch: {label_batch}")  # Debug print
-
-        self.current_index = end_index
-        return data_batch, label_batch
-
-    def __len__(self):
-        return math.ceil(len(self.dataset) / self.batch_size)
 
 
 # ------------------------------------------
@@ -788,7 +757,7 @@ class Dropout(Module):
     pass
 
 
-# -----------------
+# ----------------- For Sequential Later
 
 
 class ReLU(Module):
@@ -809,3 +778,11 @@ class Tanh(Module):
 class Sigmoid(Module):
     def forward(self, x):
         return x.sigmoid()
+    
+class Swish(Module):
+    def forward(self, x):
+        return x.swish()
+
+class GELU(Module):
+    def forward(self, x):
+        return x.gelu()
