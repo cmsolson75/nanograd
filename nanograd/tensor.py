@@ -96,7 +96,10 @@ class Tensor:
     
     # some kind of type op could be good
     def type(self, dtype):
-        self.data.type(dtype)
+        self.data = self.data.astype(dtype)
+        if self.grad is not None:
+            self.grad = self.grad.astype(dtype)
+        return self
 
     # Backward methods
     def backward(self, grad_output=None):
@@ -249,9 +252,10 @@ class Tensor:
     def stack(tensors, axis=0, dtype=np.float32):
         if not tensors:
             raise ValueError("Tensors list is empty")
-        data_list = [tensor.data for tensor in tensors]
+        data_list = [tensor.data if isinstance(tensor, Tensor) else np.array(tensor) for tensor in tensors]
         stacked_data = np.stack(data_list, axis=axis)
-        return Tensor._create_tensor(stacked_data, requires_grad=False, dtype=dtype)
+        requires_grad = any(getattr(t, "requires_grad", False) for t in tensors if isinstance(t, Tensor))
+        return Tensor._create_tensor(stacked_data, requires_grad=requires_grad, dtype=dtype)
 
     # ----------
     # Unnary Ops
@@ -492,7 +496,7 @@ class Tensor:
         return other + (-self)
 
     def __rtruediv__(self, other):
-        return self / other
+        return Tensor._ensure_tensor(other).div(self)
 
     # ----------
     # Ternary Ops
@@ -622,7 +626,7 @@ class Tensor:
 
         Args:
             weight (Tensor): Weight tensor.
-            bias (Tensor): Bias tensor.
+            bias (Tensor | None): Bias tensor or None.
 
         Returns:
             Tensor: Result of the linear operation.

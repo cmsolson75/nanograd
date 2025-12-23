@@ -72,7 +72,6 @@ class Copy(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        print(grad_output)
         (a,) = ctx.saved_tensors
         grad_a = grad_output if a.requires_grad else None
         return grad_a
@@ -652,13 +651,19 @@ class Where(Function):
 
 class Linear(Function):
     @staticmethod
-    def forward(ctx, x, weight, bias):
+    def forward(ctx, x, weight, bias=None):
         ctx.save_for_backward(x, weight, bias)
-        return x.data @ weight.data + bias.data
+        ctx.save_attribute("has_bias", bias is not None)
+        output = x.data @ weight.data
+        if bias is not None:
+            output = output + bias.data
+        return output
 
     @staticmethod
     def backward(ctx, grad_output):
         x, weight, bias = ctx.saved_tensors
+        has_bias = ctx.saved_attributes["has_bias"]
+
         grad_x = grad_output @ weight.data.T if x.requires_grad else None
         grad_weight = None
         if weight.requires_grad:
@@ -666,7 +671,7 @@ class Linear(Function):
             grad_flat = grad_output.reshape(-1, grad_output.shape[-1])
             grad_weight = x_flat.T @ grad_flat
         grad_bias = None
-        if bias.requires_grad:
+        if has_bias and bias is not None and getattr(bias, "requires_grad", False):
             reduce_axes = tuple(range(grad_output.ndim - 1))
             grad_bias = grad_output.sum(axis=reduce_axes, keepdims=True)
         return grad_x, grad_weight, grad_bias

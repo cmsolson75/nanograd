@@ -4,7 +4,7 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from nanograd import Tensor, nn, models
+from nanograd import Tensor, dataloader, datasets, models, nn
 
 
 def make_spiral(points_per_class: int = 100, num_classes: int = 3, noise: float = 0.2):
@@ -25,6 +25,8 @@ def make_spiral(points_per_class: int = 100, num_classes: int = 3, noise: float 
 
 def main():
     inputs, targets = make_spiral(points_per_class=150, num_classes=3, noise=0.2)
+    dataset = datasets.TensorDataset(inputs, targets)
+    loader = dataloader.DataLoader(dataset, batch_size=128, shuffle=True, num_workers=2)
 
     model = models.ResidualMLP(
         input_dim=2,
@@ -38,19 +40,24 @@ def main():
     optimizer = nn.Adam(model.parameters(), lr=0.03)
     loss_fn = nn.CrossEntropyLoss()
 
-    for step in range(800):
-        logits = model(Tensor(inputs))
-        loss = loss_fn(logits, Tensor(targets, dtype=np.int64))
+    epochs = 25
+    step = 0
+    for epoch in range(epochs):
+        for batch_inputs, batch_targets in loader:
+            logits = model(batch_inputs)
+            loss = loss_fn(logits, batch_targets)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            step += 1
 
-        if step % 100 == 0 or step == 799:
-            probs = logits.softmax(axis=1)
-            preds = probs.argmax(axis=1).data
-            acc = np.mean(preds == targets)
-            print(f"step {step:03d} | loss={loss.item():.4f} | acc={acc:.3f}")
+        # Evaluate on the full dataset for easy visibility
+        eval_logits = model(Tensor(inputs))
+        probs = eval_logits.softmax(axis=1)
+        preds = probs.argmax(axis=1).data
+        acc = np.mean(preds == targets)
+        print(f"epoch {epoch+1:02d}/{epochs} | step {step:04d} | loss={loss.item():.4f} | acc={acc:.3f}")
 
     print("Done! Try plotting preds vs. inputs for a quick decision boundary visualization.")
 

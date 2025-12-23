@@ -108,11 +108,13 @@ class Linear(Module):
             nonlinearity="leaky_relu",
             requires_grad=True,
         )
-        self.bias = Tensor.intercept_uniform(
-            (1, out_dims), self.weight.data, requires_grad=True
+        self.bias = (
+            Tensor.intercept_uniform(
+                (1, out_dims), self.weight.data, requires_grad=True
+            )
+            if bias
+            else None
         )
-        # if bias:
-        #     self.bias = Tensor.zeros((1, out_dims), requires_grad=True)
 
     def forward(self, x: Tensor) -> Tensor:
         """
@@ -127,7 +129,8 @@ class Linear(Module):
         return x.linear(self.weight, self.bias)
 
     def __repr__(self) -> str:
-        return f"Linear({self.weight.shape})"
+        bias_flag = self.bias is not None
+        return f"Linear({self.weight.shape}, bias={bias_flag})"
 
 
 class Sequential(Module):

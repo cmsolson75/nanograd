@@ -4,7 +4,7 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from nanograd import Tensor, nn, models
+from nanograd import Tensor, dataloader, datasets, models, nn
 
 
 def main():
@@ -19,6 +19,8 @@ def main():
         dtype=np.float32,
     )
     targets = np.array([0, 1, 1, 0], dtype=np.int64)
+    dataset = datasets.TensorDataset(inputs, targets)
+    loader = dataloader.DataLoader(dataset, batch_size=4, shuffle=True, num_workers=0)
 
     model = models.SimpleMLP(
         input_dim=2,
@@ -33,15 +35,17 @@ def main():
     loss_fn = nn.CrossEntropyLoss()
 
     for step in range(300):
-        logits = model(Tensor(inputs))
-        loss = loss_fn(logits, Tensor(targets, dtype=np.int64))
+        for batch_inputs, batch_targets in loader:
+            logits = model(batch_inputs)
+            loss = loss_fn(logits, batch_targets)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         if step % 50 == 0 or step == 299:
-            preds = logits.softmax(axis=1).argmax(axis=1).data
+            with_logits = model(Tensor(inputs))
+            preds = with_logits.softmax(axis=1).argmax(axis=1).data
             acc = np.mean(preds == targets)
             print(f"step {step:03d} | loss={loss.item():.4f} | acc={acc:.2f}")
 
