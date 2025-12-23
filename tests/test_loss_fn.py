@@ -1,8 +1,8 @@
 import pytest
 import torch
 import numpy as np
-from tensor import Tensor
-from nn import (
+from nanograd.tensor import Tensor
+from nanograd.nn import (
     NLLLoss,
     MSELoss,
     BCELoss,

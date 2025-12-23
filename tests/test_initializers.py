@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from scipy.stats import kstest
 
-from tensor import Tensor
+from nanograd.tensor import Tensor
 
 # Increasing sample size to reduce variability
 SAMPLE_SIZE = 300000

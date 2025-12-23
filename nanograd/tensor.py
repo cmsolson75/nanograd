@@ -1,7 +1,7 @@
 import numpy as np
 import math
 
-import initializers as init
+from . import initializers as init
 # Need to add typing
 
 
@@ -31,7 +31,7 @@ class Function:
 
 
 # import at this point to stop circular imports
-import functions as F
+from . import functions as F
 
 
 class Context:

@@ -1,14 +1,45 @@
 import numpy as np
 from typing import Iterable, Generator, Optional, Tuple, List
-from tensor import Tensor
-import functions as F
 import math
+
+from .tensor import Tensor
+from . import functions as F
 
 
 class Module:
     """
     Base class for all neural network modules.
     """
+
+    def __init__(self) -> None:
+        self.training = True
+
+    def train(self) -> "Module":
+        """
+        Sets the module in training mode and propagates to children.
+        """
+        self.training = True
+        for child in self._children():
+            child.train()
+        return self
+
+    def eval(self) -> "Module":
+        """
+        Sets the module in evaluation mode and propagates to children.
+        """
+        self.training = False
+        for child in self._children():
+            child.eval()
+        return self
+
+    def _children(self):
+        for value in vars(self).values():
+            if isinstance(value, Module):
+                yield value
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    if isinstance(item, Module):
+                        yield item
 
     def parameters(self) -> Generator[Tensor, None, None]:
         """
@@ -24,6 +55,12 @@ class Module:
                 yield value
             elif isinstance(value, Module):
                 yield from value.parameters()
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    if isinstance(item, Tensor):
+                        yield item
+                    elif isinstance(item, Module):
+                        yield from item.parameters()
 
     def __call__(self, x: Tensor) -> Tensor:
         """
@@ -130,6 +167,19 @@ class Sequential(Module):
         for module in self.modules:
             yield from module.parameters()
 
+class Flatten(Module):
+    def __init__(self, start_dim: int = 1, end_dim: int = -1) -> None:
+        super().__init__()
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    def forward(self, x: Tensor) -> Tensor:
+        return x.flatten(self.start_dim, self.end_dim)
+
+
+class Identity(Module):
+    def forward(self, x: Tensor) -> Tensor:
+        return x
 
 
 class Conv1d(Module):
@@ -365,7 +415,7 @@ class Adadelta(Optimizer):
                           np.sqrt(self.squared_avg[idx] + self.epsilon)) * grad
 
                 # Apply update
-                param.data -= self.lr * update
+                param.data -= self.learning_rate * update
 
                 # Accumulate updates
                 self.accumulate_updates[idx] = self.rho * self.accumulate_updates[idx] + (1 - self.rho) * update ** 2
@@ -440,9 +490,9 @@ class RMSProp(Optimizer):
 
                 if self.momentum > 0:
                     self.buffer[idx] = self.momentum * self.buffer[idx] + grad / (np.sqrt(avg) + self.epsilon)
-                    param.data -= self.lr * self.buffer[idx]
+                    param.data -= self.learning_rate * self.buffer[idx]
                 else:
-                    param.data -= self.lr * grad / (np.sqrt(avg) + self.epsilon)
+                    param.data -= self.learning_rate * grad / (np.sqrt(avg) + self.epsilon)
 
 
 
@@ -489,7 +539,7 @@ class Adam(Optimizer):
                 m_hat = self.m[idx] / (1 - self.beta1 ** self.t)
                 v_hat = self.v[idx] / (1 - self.beta2 ** self.t)
 
-                param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
+                param.data -= self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
 
 
 
@@ -529,11 +579,11 @@ class AdamW(Adam):
                 m_hat = self.m[idx] / (1 - self.beta1 ** self.t)
                 v_hat = self.v[idx] / (1 - self.beta2 ** self.t)
 
-                param.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.epsilon)
+                param.data -= self.learning_rate * m_hat / (np.sqrt(v_hat) + self.epsilon)
 
                 # Apply weight decay separately
                 if self.weight_decay != 0:
-                    param.data -= self.lr * self.weight_decay * param.data
+                    param.data -= self.learning_rate * self.weight_decay * param.data
 
 
 
@@ -742,22 +792,106 @@ class HuberLoss(Loss):
 
 
 class BatchNorm1d(Module):
-    pass
+    def __init__(self, num_features: int, momentum: float = 0.1, eps: float = 1e-5):
+        super().__init__()
+        self.num_features = num_features
+        self.momentum = momentum
+        self.eps = eps
+        self.gamma = Tensor.ones((1, num_features), requires_grad=True)
+        self.beta = Tensor.zeros((1, num_features), requires_grad=True)
+        self.running_mean = np.zeros((1, num_features), dtype=np.float32)
+        self.running_var = np.ones((1, num_features), dtype=np.float32)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.training:
+            batch_mean = x.mean(axis=0, keepdims=True)
+            batch_var = ((x - batch_mean).square()).mean(axis=0, keepdims=True)
+
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * batch_mean.data
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * batch_var.data
+
+            mean = batch_mean
+            var = batch_var
+        else:
+            mean = Tensor(self.running_mean, requires_grad=False)
+            var = Tensor(self.running_var, requires_grad=False)
+
+        x_hat = (x - mean) / (var + self.eps).sqrt()
+        return self.gamma * x_hat + self.beta
 
 
 class BatchNorm2d(Module):
-    pass
+    def __init__(self, num_features: int, momentum: float = 0.1, eps: float = 1e-5):
+        super().__init__()
+        self.num_features = num_features
+        self.momentum = momentum
+        self.eps = eps
+        self.gamma = Tensor.ones((1, num_features, 1, 1), requires_grad=True)
+        self.beta = Tensor.zeros((1, num_features, 1, 1), requires_grad=True)
+        self.running_mean = np.zeros((1, num_features, 1, 1), dtype=np.float32)
+        self.running_var = np.ones((1, num_features, 1, 1), dtype=np.float32)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.training:
+            axes = (0, 2, 3)
+            batch_mean = x.mean(axis=axes, keepdims=True)
+            batch_var = ((x - batch_mean).square()).mean(axis=axes, keepdims=True)
+
+            self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * batch_mean.data
+            self.running_var = (1 - self.momentum) * self.running_var + self.momentum * batch_var.data
+
+            mean = batch_mean
+            var = batch_var
+        else:
+            mean = Tensor(self.running_mean, requires_grad=False)
+            var = Tensor(self.running_var, requires_grad=False)
+
+        x_hat = (x - mean) / (var + self.eps).sqrt()
+        return self.gamma * x_hat + self.beta
 
 
 class LayerNorm(Module):
-    pass
+    def __init__(self, normalized_shape, eps: float = 1e-5):
+        super().__init__()
+        if isinstance(normalized_shape, int):
+            normalized_shape = (normalized_shape,)
+        self.normalized_shape = tuple(normalized_shape)
+        self.eps = eps
+        self.gamma = Tensor.ones(self.normalized_shape, requires_grad=True)
+        self.beta = Tensor.zeros(self.normalized_shape, requires_grad=True)
+
+    def forward(self, x: Tensor) -> Tensor:
+        axis_start = x.ndims - len(self.normalized_shape)
+        axes = tuple(range(axis_start, x.ndims))
+        mean = x.mean(axis=axes, keepdims=True)
+        var = ((x - mean).square()).mean(axis=axes, keepdims=True)
+        normalized = (x - mean) / (var + self.eps).sqrt()
+
+        broadcast_shape = (1,) * axis_start + self.normalized_shape
+        gamma = self.gamma.reshape(*broadcast_shape)
+        beta = self.beta.reshape(*broadcast_shape)
+        return normalized * gamma + beta
 
 
 class Dropout(Module):
-    pass
+    def __init__(self, p: float = 0.5):
+        super().__init__()
+        if p < 0 or p >= 1:
+            raise ValueError("dropout probability has to be in [0, 1).")
+        self.p = p
+
+    def forward(self, x: Tensor) -> Tensor:
+        if not self.training or self.p == 0:
+            return x
+        keep_prob = 1 - self.p
+        mask = Tensor(
+            np.random.binomial(1, keep_prob, size=x.shape).astype(x.data.dtype),
+            requires_grad=False,
+        )
+        return x * mask / keep_prob
 
 
-# ----------------- For Sequential Later
+# ----------------- For Sequential
 
 
 class ReLU(Module):

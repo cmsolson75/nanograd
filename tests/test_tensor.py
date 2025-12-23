@@ -1,7 +1,7 @@
 import pytest
 import torch
 import numpy as np
-from tensor import Tensor
+from nanograd.tensor import Tensor
 
 EPSILON = 1e-6  # Tolerance for floating point comparison
 EPSILON_2 = 1e-3

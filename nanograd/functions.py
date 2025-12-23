@@ -1,4 +1,4 @@
-from tensor import Function
+from .tensor import Function
 import numpy as np
 
 # Need to add typing
@@ -452,12 +452,21 @@ class Mean(Function):
 
         a_grad = None
         if a.requires_grad:
-            a_grad = np.ones_like(a.data) / a.data.size
+            if axis is None:
+                count = a.data.size
+                expanded_grad = grad_output
+            else:
+                axes = axis if isinstance(axis, tuple) else (axis,)
+                count = 1
+                for ax in axes:
+                    count *= a.data.shape[ax]
+                expanded_grad = (
+                    np.expand_dims(grad_output, axis=axes) if not keepdims else grad_output
+                )
 
-            if axis is not None and not keepdims:
-                grad_output = np.expand_dims(grad_output, axis=axis)
+            a_grad = np.ones_like(a.data) / count
 
-            a_grad *= grad_output
+            a_grad *= expanded_grad
         return a_grad
 
 
@@ -651,8 +660,13 @@ class Linear(Function):
     def backward(ctx, grad_output):
         x, weight, bias = ctx.saved_tensors
         grad_x = grad_output @ weight.data.T if x.requires_grad else None
-        grad_weight = x.data.T @ grad_output if weight.requires_grad else None
-        grad_bias = (
-            grad_output.sum(axis=0, keepdims=True) if bias.requires_grad else None
-        )
+        grad_weight = None
+        if weight.requires_grad:
+            x_flat = x.data.reshape(-1, x.data.shape[-1])
+            grad_flat = grad_output.reshape(-1, grad_output.shape[-1])
+            grad_weight = x_flat.T @ grad_flat
+        grad_bias = None
+        if bias.requires_grad:
+            reduce_axes = tuple(range(grad_output.ndim - 1))
+            grad_bias = grad_output.sum(axis=reduce_axes, keepdims=True)
         return grad_x, grad_weight, grad_bias

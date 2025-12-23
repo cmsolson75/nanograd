@@ -1,6 +1,6 @@
 import numpy as np
 import math
-from tensor import Tensor
+from .tensor import Tensor
 
 """
 Need to add in workers to make this work better.
