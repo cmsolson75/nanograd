@@ -160,8 +160,13 @@ class Tensor:
     # Creational Ops
     # ----------
     @classmethod
-    def kaiming_uniform(cls, shape, a=math.sqrt(5), mode='fan_in', nonlinearity="leaky_relu", requires_grad=False, dtype=np.float32):
-        data = init.kaiming_uniform(shape, a=a, mode=mode, nonlinearity=nonlinearity)
+    def kaiming_uniform(cls, shape, gain=math.sqrt(5), mode='fan_in', nonlinearity="leaky_relu", requires_grad=False, dtype=np.float32, **kwargs):
+        """
+        gain maps to the negative_slope parameter `a` in PyTorch's kaiming_uniform_.
+        kwargs may include legacy `a` to preserve backwards compatibility.
+        """
+        slope = kwargs.get("a", gain)
+        data = init.kaiming_uniform(shape, a=slope, mode=mode, nonlinearity=nonlinearity)
         return cls(data, requires_grad=requires_grad, dtype=dtype)
     
     @classmethod
@@ -174,8 +179,13 @@ class Tensor:
         return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
-    def kaiming_normal(cls, shape, gain=math.sqrt(5), mode='fan_in', requires_grad=False, dtype=np.float32):
-        data = init.kaiming_normal(shape, gain=gain, mode=mode)
+    def kaiming_normal(cls, shape, gain=math.sqrt(2), mode='fan_in', requires_grad=False, dtype=np.float32, **kwargs):
+        """
+        gain maps to the negative_slope parameter `a` in PyTorch's kaiming_normal_.
+        kwargs may include legacy `a` to preserve backwards compatibility.
+        """
+        slope = kwargs.get("a", gain)
+        data = init.kaiming_normal(shape, gain=slope, mode=mode)
         return cls(data, requires_grad=requires_grad, dtype=dtype)
 
     @classmethod
